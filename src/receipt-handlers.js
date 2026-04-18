@@ -7,6 +7,7 @@ const {
   updateReceiptStatusWithAudit
 } = require("./storage");
 const { getActorLabel } = require("./auth");
+const { triggerCriticalManagementAlert } = require("./critical-alerts");
 
 function sendJson(res, statusCode, payload) {
   if (typeof res.status === "function" && typeof res.json === "function") {
@@ -183,7 +184,12 @@ async function createReceiptHandler(req, res) {
       status: body.status || "Draft"
     });
 
-    return sendJson(res, 201, receipt);
+    const response = sendJson(res, 201, receipt);
+    triggerCriticalManagementAlert({
+      trigger: "receipt-created",
+      actor
+    });
+    return response;
   } catch (error) {
     console.error("Failed to create receipt:", error.message);
     return sendJson(res, 500, { error: "Nu am putut salva receptia." });
@@ -203,7 +209,12 @@ async function updateReceiptStatusHandler(req, res, id) {
       return sendJson(res, 404, { error: "Receptia nu a fost gasita." });
     }
 
-    return sendJson(res, 200, receipt);
+    const response = sendJson(res, 200, receipt);
+    triggerCriticalManagementAlert({
+      trigger: "receipt-status-updated",
+      actor: getActorLabel(req)
+    });
+    return response;
   } catch (error) {
     console.error("Failed to update receipt status:", error.message);
     return sendJson(res, 500, { error: "Nu am putut actualiza statusul." });

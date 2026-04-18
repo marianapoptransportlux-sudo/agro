@@ -1,5 +1,6 @@
 const { createOpeningDocument, getConfig, listOpeningDocuments } = require("./storage");
 const { getActorLabel } = require("./auth");
+const { triggerCriticalManagementAlert } = require("./critical-alerts");
 
 function sendJson(res, statusCode, payload) {
   if (typeof res.status === "function" && typeof res.json === "function") {
@@ -55,7 +56,12 @@ async function createOpeningDocumentHandler(req, res) {
       ...body,
       createdBy: actor
     });
-    return sendJson(res, 201, openingDocument);
+    const response = sendJson(res, 201, openingDocument);
+    triggerCriticalManagementAlert({
+      trigger: "opening-document-created",
+      actor
+    });
+    return response;
   } catch (error) {
     console.error("Failed to create opening document:", error.message);
     return sendJson(res, 400, { error: error.message || "Nu am putut salva soldul initial." });

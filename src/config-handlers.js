@@ -5,6 +5,7 @@ const {
   updateSystemSettings
 } = require("./storage");
 const { getActorLabel } = require("./auth");
+const { triggerCriticalManagementAlert } = require("./critical-alerts");
 
 function sendJson(res, statusCode, payload) {
   if (typeof res.status === "function" && typeof res.json === "function") {
@@ -60,11 +61,17 @@ async function updateConfigEntryHandler(req, res, entity, id) {
 
 async function updateSystemSettingsHandler(req, res) {
   try {
+    const actor = getActorLabel(req);
     const settings = await updateSystemSettings({
       ...getBody(req),
-      changedBy: getActorLabel(req)
+      changedBy: actor
     });
-    return sendJson(res, 200, settings);
+    const response = sendJson(res, 200, settings);
+    triggerCriticalManagementAlert({
+      trigger: "system-settings-updated",
+      actor
+    });
+    return response;
   } catch (error) {
     console.error("Failed to update system settings:", error.message);
     return sendJson(res, 400, { error: "Nu am putut salva setarile sistemului." });

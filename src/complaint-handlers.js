@@ -5,6 +5,7 @@ const {
   updateComplaint
 } = require("./storage");
 const { getActorLabel } = require("./auth");
+const { triggerCriticalManagementAlert } = require("./critical-alerts");
 
 function sendJson(res, statusCode, payload) {
   if (typeof res.status === "function" && typeof res.json === "function") {
@@ -52,7 +53,12 @@ async function createComplaintHandler(req, res) {
       ...body,
       createdBy: actor
     });
-    return sendJson(res, 201, complaint);
+    const response = sendJson(res, 201, complaint);
+    triggerCriticalManagementAlert({
+      trigger: "complaint-created",
+      actor
+    });
+    return response;
   } catch (error) {
     console.error("Failed to create complaint:", error.message);
     return sendJson(res, 500, { error: error.message || "Nu am putut salva reclamatia." });
@@ -70,7 +76,12 @@ async function updateComplaintHandler(req, res, id) {
       return sendJson(res, 404, { error: "Reclamatia nu a fost gasita." });
     }
 
-    return sendJson(res, 200, complaint);
+    const response = sendJson(res, 200, complaint);
+    triggerCriticalManagementAlert({
+      trigger: "complaint-updated",
+      actor: getActorLabel(req)
+    });
+    return response;
   } catch (error) {
     console.error("Failed to update complaint:", error.message);
     return sendJson(res, 400, { error: error.message || "Nu am putut actualiza reclamatia." });

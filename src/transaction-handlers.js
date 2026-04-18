@@ -8,6 +8,7 @@ const {
   updateTransaction
 } = require("./storage");
 const { getActorLabel } = require("./auth");
+const { triggerCriticalManagementAlert } = require("./critical-alerts");
 
 function sendJson(res, statusCode, payload) {
   if (typeof res.status === "function" && typeof res.json === "function") {
@@ -134,7 +135,12 @@ async function createTransactionHandler(req, res) {
       createdBy: actor
     });
 
-    return sendJson(res, 201, transaction);
+    const response = sendJson(res, 201, transaction);
+    triggerCriticalManagementAlert({
+      trigger: "transaction-created",
+      actor
+    });
+    return response;
   } catch (error) {
     console.error("Failed to create transaction:", error.message);
     return sendJson(res, 500, { error: "Nu am putut salva tranzactia." });
@@ -163,7 +169,12 @@ async function updateTransactionHandler(req, res, id) {
       return sendJson(res, 404, { error: "Tranzactia nu a fost gasita." });
     }
 
-    return sendJson(res, 200, transaction);
+    const response = sendJson(res, 200, transaction);
+    triggerCriticalManagementAlert({
+      trigger: "transaction-updated",
+      actor: getActorLabel(req)
+    });
+    return response;
   } catch (error) {
     console.error("Failed to update transaction:", error.message);
     return sendJson(res, 400, { error: error.message || "Nu am putut actualiza tranzactia." });

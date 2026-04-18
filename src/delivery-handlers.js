@@ -6,6 +6,7 @@ const {
   updateDelivery
 } = require("./storage");
 const { getActorLabel } = require("./auth");
+const { triggerCriticalManagementAlert } = require("./critical-alerts");
 
 function sendJson(res, statusCode, payload) {
   if (typeof res.status === "function" && typeof res.json === "function") {
@@ -60,7 +61,12 @@ async function createDeliveryHandler(req, res) {
       customer: customer.name
     });
 
-    return sendJson(res, 201, delivery);
+    const response = sendJson(res, 201, delivery);
+    triggerCriticalManagementAlert({
+      trigger: "delivery-created",
+      actor
+    });
+    return response;
   } catch (error) {
     console.error("Failed to create delivery:", error.message);
     return sendJson(res, 500, { error: error.message || "Nu am putut salva livrarea." });
@@ -78,7 +84,12 @@ async function updateDeliveryHandler(req, res, id) {
       return sendJson(res, 404, { error: "Livrarea nu a fost gasita." });
     }
 
-    return sendJson(res, 200, delivery);
+    const response = sendJson(res, 200, delivery);
+    triggerCriticalManagementAlert({
+      trigger: "delivery-updated",
+      actor: getActorLabel(req)
+    });
+    return response;
   } catch (error) {
     console.error("Failed to update delivery:", error.message);
     return sendJson(res, 400, { error: error.message || "Nu am putut actualiza livrarea." });

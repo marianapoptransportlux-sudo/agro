@@ -186,6 +186,28 @@ function getExecutiveStatus(snapshot) {
   };
 }
 
+function getCriticalReasons(snapshot) {
+  const reasons = [];
+
+  if (snapshot.problems.receiptsWithoutPrice.length) {
+    reasons.push(`receptii fara pret: ${snapshot.problems.receiptsWithoutPrice.length}`);
+  }
+
+  if (snapshot.problems.deliveriesWithoutInvoice.length) {
+    reasons.push(`livrari fara factura: ${snapshot.problems.deliveriesWithoutInvoice.length}`);
+  }
+
+  if (snapshot.problems.openComplaints.length) {
+    reasons.push(`reclamatii deschise: ${snapshot.problems.openComplaints.length}`);
+  }
+
+  if (snapshot.financials.totalPayables > snapshot.financials.totalReceivables * 1.5) {
+    reasons.push("presiune pe cash");
+  }
+
+  return reasons.slice(0, 4);
+}
+
 function getPriorityActions(snapshot) {
   const actions = [];
 
@@ -414,10 +436,26 @@ function buildManagementDetailMessages(snapshot) {
   ];
 }
 
+function buildCriticalAlertMessages(snapshot, context = {}) {
+  const status = getExecutiveStatus(snapshot);
+  const reasons = getCriticalReasons(snapshot);
+  const trigger = String(context.trigger || "system").trim() || "system";
+
+  return [
+    `ALERTA CRITICA ${snapshot.report.date} | ${status.reason} | declansator ${trigger}`,
+    reasons.length ? `Cauze: ${reasons.join(" | ")}` : "Cauze: situatie critica detectata in indicatorii manageriali.",
+    buildPriorityActionsMessage(snapshot),
+    buildFinancialExposureMessage(snapshot),
+    { reportActionDate: snapshot.report.date }
+  ];
+}
+
 module.exports = {
   buildManagementDetailMessages,
+  buildCriticalAlertMessages,
   buildManagementTelegramReportMessages,
   formatCurrency,
   formatNumber,
-  getManagementSnapshot
+  getManagementSnapshot,
+  getManagementStatus: getExecutiveStatus
 };

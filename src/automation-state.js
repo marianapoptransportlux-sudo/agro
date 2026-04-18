@@ -10,6 +10,9 @@ const defaultAutomationState = {
     closeOfDay: {
       lastSentDate: "",
       actions: {}
+    },
+    criticalAlerts: {
+      byDate: {}
     }
   }
 };
@@ -44,6 +47,14 @@ function readAutomationState() {
         actions: {
           ...defaultAutomationState.reports.closeOfDay.actions,
           ...(parsed.reports?.closeOfDay?.actions || {})
+        }
+      },
+      criticalAlerts: {
+        ...defaultAutomationState.reports.criticalAlerts,
+        ...(parsed.reports?.criticalAlerts || {}),
+        byDate: {
+          ...defaultAutomationState.reports.criticalAlerts.byDate,
+          ...(parsed.reports?.criticalAlerts?.byDate || {})
         }
       }
     }
@@ -198,6 +209,52 @@ function getLastCloseOfDaySentDate() {
   return readAutomationState().reports.closeOfDay.lastSentDate || "";
 }
 
+function getCriticalAlertState(dateValue) {
+  const normalizedDate = String(dateValue || "").trim();
+  if (!normalizedDate) {
+    return {
+      date: "",
+      lastStatus: "",
+      lastFingerprint: "",
+      lastAlertAt: "",
+      lastEvaluatedAt: "",
+      lastTrigger: "",
+      lastReason: "",
+      recipients: 0
+    };
+  }
+
+  const state = readAutomationState();
+  const current = state.reports.criticalAlerts.byDate?.[normalizedDate] || {};
+  return {
+    date: normalizedDate,
+    lastStatus: String(current.lastStatus || ""),
+    lastFingerprint: String(current.lastFingerprint || ""),
+    lastAlertAt: String(current.lastAlertAt || ""),
+    lastEvaluatedAt: String(current.lastEvaluatedAt || ""),
+    lastTrigger: String(current.lastTrigger || ""),
+    lastReason: String(current.lastReason || ""),
+    recipients: Number(current.recipients || 0)
+  };
+}
+
+function updateCriticalAlertState(dateValue, payload = {}) {
+  const normalizedDate = String(dateValue || "").trim();
+  if (!normalizedDate) {
+    return getCriticalAlertState("");
+  }
+
+  const state = readAutomationState();
+  const current = state.reports.criticalAlerts.byDate?.[normalizedDate] || {};
+  state.reports.criticalAlerts.byDate[normalizedDate] = {
+    ...current,
+    ...payload,
+    date: normalizedDate
+  };
+  writeAutomationState(state);
+  return getCriticalAlertState(normalizedDate);
+}
+
 function markCloseOfDaySent(dateValue) {
   const normalizedDate = String(dateValue || "").trim();
   if (!normalizedDate) {
@@ -212,6 +269,7 @@ function markCloseOfDaySent(dateValue) {
 
 module.exports = {
   getCloseOfDayReportActionState,
+  getCriticalAlertState,
   getLastCloseOfDaySentDate,
   getTelegramLinkByChatId,
   getTelegramLink,
@@ -219,5 +277,6 @@ module.exports = {
   linkTelegramUser,
   markCloseOfDaySent,
   recordCloseOfDayReportAction,
-  readAutomationState
+  readAutomationState,
+  updateCriticalAlertState
 };
