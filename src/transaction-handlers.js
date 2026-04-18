@@ -47,11 +47,10 @@ async function createTransactionHandler(req, res) {
     (!body.receiptId && referenceType === "receipt") ||
     (!body.deliveryId && referenceType === "delivery") ||
     (!body.openingDebtId && referenceType === "opening-debt") ||
-    !body.amount ||
-    !body.direction
+    !body.amount
   ) {
     return sendJson(res, 400, {
-      error: "Campurile de referinta, amount si direction sunt obligatorii."
+      error: "Campurile de referinta si amount sunt obligatorii."
     });
   }
 
@@ -69,7 +68,19 @@ async function createTransactionHandler(req, res) {
       return sendJson(res, 400, { error: "Tipul de plata selectat nu este valid." });
     }
 
-    const direction = body.direction === "collection" ? "collection" : "payment";
+    const normalizedAmount = Number(body.amount);
+    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+      return sendJson(res, 400, { error: "Suma trebuie sa fie mai mare ca zero." });
+    }
+
+    let direction =
+      body.direction === "collection"
+        ? "collection"
+        : body.direction === "payment"
+          ? "payment"
+          : referenceType === "delivery"
+            ? "collection"
+            : "payment";
     let referencePayload = null;
 
     if (referenceType === "receipt") {
@@ -111,12 +122,13 @@ async function createTransactionHandler(req, res) {
         partnerId: openingDebt.partnerId,
         partner: openingDebt.partner
       };
+      direction = openingDebt.direction === "collection" ? "collection" : "payment";
     }
 
     const transaction = await createTransaction({
       ...referencePayload,
       direction,
-      amount: body.amount,
+      amount: normalizedAmount,
       paymentType: body.paymentType || "",
       note: body.note || "",
       createdBy: actor

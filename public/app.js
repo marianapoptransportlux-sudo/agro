@@ -77,6 +77,7 @@ const transactionMessageEl = document.getElementById("transaction-message");
 const transactionReferenceTypeSelect = document.getElementById("transaction-reference-type-select");
 const transactionReferenceSelect = document.getElementById("transaction-reference-select");
 const transactionDirectionSelect = document.getElementById("transaction-direction-select");
+const transactionDirectionChipEl = document.getElementById("transaction-direction-chip");
 const transactionPaymentTypeSelect = document.getElementById("transaction-payment-type-select");
 const transactionPartnerEl = document.getElementById("transaction-partner");
 const transactionTargetEl = document.getElementById("transaction-target");
@@ -108,6 +109,9 @@ const dailyReportProcessingsEl = document.getElementById("daily-report-processin
 const dailyReportDeliveriesEl = document.getElementById("daily-report-deliveries");
 const dailyReportTransactionsEl = document.getElementById("daily-report-transactions");
 const dailyReportComplaintsEl = document.getElementById("daily-report-complaints");
+const receiptSaveNewButton = document.getElementById("receipt-save-new-button");
+const transactionSaveNewButton = document.getElementById("transaction-save-new-button");
+const deliverySaveNewButton = document.getElementById("delivery-save-new-button");
 
 const entityLabels = {
   partners: "Parteneri",
@@ -933,7 +937,35 @@ function renderSelectOptions(select, items, mapLabel, placeholder, mapValue = (i
   select.innerHTML = options.join("");
 }
 
+function setSelectValue(select, preferredValues = []) {
+  const availableValues = Array.from(select.options)
+    .filter((option) => !option.disabled)
+    .map((option) => String(option.value));
+  const matchedValue = preferredValues.find((value) =>
+    value !== undefined &&
+    value !== null &&
+    value !== "" &&
+    availableValues.includes(String(value))
+  );
+
+  select.value = matchedValue !== undefined ? String(matchedValue) : availableValues[0] || "";
+  return select.value;
+}
+
 function renderReceiptSelectors(config) {
+  const currentSelections = {
+    supplierId: supplierSelect.value,
+    productId: productSelect.value,
+    locationId: locationSelect.value,
+    receivedBy: userSelect.value,
+    processingReceiptId: processingReceiptSelect.value,
+    processingType: processingTypeSelect.value,
+    processingUserId: processingUserSelect.value,
+    paymentType: transactionPaymentTypeSelect.value,
+    deliveryReceiptId: deliveryReceiptSelect.value,
+    deliveryCustomerId: deliveryCustomerSelect.value,
+    complaintDeliveryId: complaintDeliverySelect.value
+  };
   const suppliers = config.partners.filter((item) => item.role === "furnizor" || item.role === "ambele");
   const customers = config.partners.filter((item) => item.role === "cumparator" || item.role === "ambele");
   const operators = config.users.filter((item) =>
@@ -963,34 +995,14 @@ function renderReceiptSelectors(config) {
     "Selecteaza partener"
   );
 
-  if (config.products.length > 0) {
-    productSelect.value = String(config.products[0].id);
-    unitInput.value = config.products[0].unit;
-  }
-
-  if (suppliers.length > 0) {
-    supplierSelect.value = String(suppliers[0].id);
-  }
-
-  if (config.storageLocations.length > 0) {
-    locationSelect.value = String(config.storageLocations[0].id);
-  }
-
-  if (operators.length > 0) {
-    userSelect.value = String(operators[0].id);
-  }
-
-  if (config.products.length > 0) {
-    openingStockProductEl.value = String(config.products[0].id);
-  }
-
-  if (config.storageLocations.length > 0) {
-    openingStockLocationEl.value = String(config.storageLocations[0].id);
-  }
-
-  if (config.partners.length > 0) {
-    openingDebtPartnerEl.value = String(config.partners[0].id);
-  }
+  setSelectValue(supplierSelect, [currentSelections.supplierId, suppliers[0]?.id]);
+  setSelectValue(productSelect, [currentSelections.productId, config.products[0]?.id]);
+  setSelectValue(locationSelect, [currentSelections.locationId, config.storageLocations[0]?.id]);
+  setSelectValue(userSelect, [currentSessionUser?.id, currentSelections.receivedBy, operators[0]?.id]);
+  setSelectValue(openingStockProductEl, [openingStockProductEl.value, config.products[0]?.id]);
+  setSelectValue(openingStockLocationEl, [openingStockLocationEl.value, config.storageLocations[0]?.id]);
+  setSelectValue(openingDebtPartnerEl, [openingDebtPartnerEl.value, config.partners[0]?.id]);
+  syncUnitByProduct();
 
   const processingReceiptOptions = receiptsCache.filter((item) => item.status !== "Procesata");
   renderSelectOptions(
@@ -1045,48 +1057,34 @@ function renderReceiptSelectors(config) {
     "Selecteaza livrarea"
   );
 
-  if (processingReceiptOptions.length > 0) {
-    processingReceiptSelect.value = String(processingReceiptOptions[0].id);
-  }
-
-  if (config.processingTypes.length > 0) {
-    const activeType = config.processingTypes.find((item) => item.active);
-    if (activeType) {
-      processingTypeSelect.value = activeType.name;
-    }
-  }
-
-  if (operators.length > 0) {
-    processingUserSelect.value = String(operators[0].id);
-  }
-
-  const firstAvailableDeliveryReceipt = receiptsCache.find(
-    (item) =>
-      Number(
-        item.availableQuantity ??
-          item.finalNetQuantity ??
-          item.provisionalNetQuantity ??
-          item.quantity
-      ) > 0
-  );
-  if (firstAvailableDeliveryReceipt) {
-    deliveryReceiptSelect.value = String(firstAvailableDeliveryReceipt.id);
-  }
-
-  if (customers.length > 0) {
-    deliveryCustomerSelect.value = String(customers[0].id);
-  }
-
-  if (deliveriesCache.length > 0) {
-    complaintDeliverySelect.value = String(deliveriesCache[0].id);
-  }
-
   const activePaymentType = config.paymentTypes.find((item) => item.active);
-  if (activePaymentType) {
-    transactionPaymentTypeSelect.value = activePaymentType.name;
-  }
+  setSelectValue(processingReceiptSelect, [currentSelections.processingReceiptId, processingReceiptOptions[0]?.id]);
+  setSelectValue(
+    processingTypeSelect,
+    [currentSelections.processingType, config.processingTypes.find((item) => item.active)?.name]
+  );
+  setSelectValue(processingUserSelect, [currentSelections.processingUserId, currentSessionUser?.id, operators[0]?.id]);
+  setSelectValue(transactionPaymentTypeSelect, [currentSelections.paymentType, activePaymentType?.name]);
+  setSelectValue(
+    deliveryReceiptSelect,
+    [
+      currentSelections.deliveryReceiptId,
+      receiptsCache.find(
+        (item) =>
+          Number(
+            item.availableQuantity ??
+              item.finalNetQuantity ??
+              item.provisionalNetQuantity ??
+              item.quantity
+          ) > 0
+      )?.id
+    ]
+  );
+  setSelectValue(deliveryCustomerSelect, [currentSelections.deliveryCustomerId, customers[0]?.id]);
+  setSelectValue(complaintDeliverySelect, [currentSelections.complaintDeliveryId, deliveriesCache[0]?.id]);
 
   renderTransactionReferenceOptions();
+  syncTransactionDirection();
   renderTransactionPreview();
   renderDeliveryPreview();
 }
@@ -1472,6 +1470,15 @@ function syncUnitByProduct() {
   );
 
   unitInput.value = selectedProduct ? selectedProduct.unit : "";
+  if (selectedProduct) {
+    if (!String(humidityInput.value || "").trim()) {
+      humidityInput.value = String(selectedProduct.humidityNorm ?? 0);
+    }
+
+    if (!String(impurityInput.value || "").trim()) {
+      impurityInput.value = String(selectedProduct.impurityNorm ?? 0);
+    }
+  }
   renderReceiptEstimate();
 }
 
@@ -1750,6 +1757,9 @@ async function createReceipt(formData) {
     (item) => String(item.id) === formData.get("locationId")
   );
   const receiver = currentConfig.users.find((item) => String(item.id) === formData.get("receivedBy"));
+  const selectedProduct = currentConfig.products.find(
+    (item) => String(item.id) === String(formData.get("productId"))
+  );
 
   const payload = {
     supplierId: formData.get("supplierId"),
@@ -1758,14 +1768,14 @@ async function createReceipt(formData) {
     product: product?.name || "",
     quantity: formData.get("quantity"),
     unit: product?.unit || formData.get("unit"),
-    price: formData.get("price"),
-    humidity: formData.get("humidity"),
-    impurity: formData.get("impurity"),
+    price: formData.get("price") || "0",
+    humidity: formData.get("humidity") || String(selectedProduct?.humidityNorm ?? 0),
+    impurity: formData.get("impurity") || String(selectedProduct?.impurityNorm ?? 0),
     vehicle: formData.get("vehicle"),
     note: formData.get("note"),
     locationId: formData.get("locationId"),
     location: location?.name || "",
-    receivedBy: receiver?.name || "",
+    receivedBy: receiver?.name || currentSessionUser?.name || "",
     source: "dashboard"
   };
 
@@ -1781,6 +1791,156 @@ async function createReceipt(formData) {
     const error = await response.json();
     throw new Error(error.error || "Eroare la salvare.");
   }
+}
+
+function validateReceiptForm(formData) {
+  if (!formData.get("supplierId")) {
+    return "Selecteaza furnizorul.";
+  }
+
+  if (!formData.get("productId")) {
+    return "Selecteaza produsul.";
+  }
+
+  if (Number(formData.get("quantity") || 0) <= 0) {
+    return "Cantitatea trebuie sa fie mai mare ca zero.";
+  }
+
+  if (Number(formData.get("price") || 0) < 0) {
+    return "Pretul nu poate fi negativ.";
+  }
+
+  if (Number(formData.get("humidity") || 0) < 0 || Number(formData.get("impurity") || 0) < 0) {
+    return "Umiditatea si impuritatile trebuie sa fie valori pozitive.";
+  }
+
+  return "";
+}
+
+function validateTransactionForm(formData) {
+  if (!formData.get("referenceId")) {
+    return "Selecteaza referinta pentru plata sau incasare.";
+  }
+
+  if (Number(formData.get("amount") || 0) <= 0) {
+    return "Suma trebuie sa fie mai mare ca zero.";
+  }
+
+  return "";
+}
+
+function validateDeliveryForm(formData) {
+  if (!formData.get("receiptId")) {
+    return "Selecteaza receptia sursa.";
+  }
+
+  if (!formData.get("customerId")) {
+    return "Selecteaza cumparatorul.";
+  }
+
+  if (Number(formData.get("deliveredQuantity") || 0) <= 0) {
+    return "Cantitatea livrata trebuie sa fie mai mare ca zero.";
+  }
+
+  return "";
+}
+
+function getFormSubmitMode(form) {
+  const mode = form.dataset.submitMode === "save-new" ? "save-new" : "save";
+  form.dataset.submitMode = "save";
+  return mode;
+}
+
+function resetReceiptForm(mode = "save") {
+  const preserveContext = mode !== "save-new";
+  const preservedValues = {
+    supplierId: preserveContext ? supplierSelect.value : "",
+    productId: preserveContext ? productSelect.value : "",
+    locationId: preserveContext ? locationSelect.value : "",
+    receivedBy: preserveContext ? userSelect.value : "",
+    price: preserveContext ? formEl.elements.price.value : "",
+    humidity: preserveContext ? humidityInput.value : "",
+    impurity: preserveContext ? impurityInput.value : ""
+  };
+
+  formEl.reset();
+  if (currentConfig) {
+    renderReceiptSelectors(currentConfig);
+  }
+
+  if (preserveContext) {
+    setSelectValue(supplierSelect, [preservedValues.supplierId]);
+    setSelectValue(productSelect, [preservedValues.productId]);
+    setSelectValue(locationSelect, [preservedValues.locationId]);
+    setSelectValue(userSelect, [preservedValues.receivedBy, currentSessionUser?.id]);
+  }
+
+  formEl.elements.price.value = preservedValues.price || "";
+  humidityInput.value = preservedValues.humidity || "";
+  impurityInput.value = preservedValues.impurity || "";
+  formEl.elements.quantity.value = "";
+  formEl.elements.vehicle.value = "";
+  formEl.elements.note.value = "";
+  syncUnitByProduct();
+  formEl.elements.quantity.focus();
+}
+
+function resetTransactionForm(mode = "save") {
+  const preserveContext = mode !== "save-new";
+  const preservedValues = {
+    referenceType: preserveContext ? transactionReferenceTypeSelect.value : "",
+    referenceId: preserveContext ? transactionReferenceSelect.value : "",
+    paymentType: preserveContext ? transactionPaymentTypeSelect.value : ""
+  };
+
+  transactionFormEl.reset();
+  if (preserveContext && preservedValues.referenceType) {
+    transactionReferenceTypeSelect.value = preservedValues.referenceType;
+  }
+
+  renderTransactionReferenceOptions();
+  syncTransactionDirection();
+
+  if (preserveContext) {
+    setSelectValue(transactionReferenceSelect, [preservedValues.referenceId]);
+    setSelectValue(transactionPaymentTypeSelect, [preservedValues.paymentType]);
+  }
+
+  transactionFormEl.elements.amount.value = "";
+  transactionFormEl.elements.note.value = "";
+  renderTransactionPreview();
+  transactionFormEl.elements.amount.focus();
+}
+
+function resetDeliveryForm(mode = "save") {
+  const preserveContext = mode !== "save-new";
+  const preservedValues = {
+    receiptId: preserveContext ? deliveryReceiptSelect.value : "",
+    customerId: preserveContext ? deliveryCustomerSelect.value : "",
+    contractNumber: preserveContext ? deliveryFormEl.elements.contractNumber.value : "",
+    contractDate: preserveContext ? deliveryFormEl.elements.contractDate.value : "",
+    contractPrice: preserveContext ? deliveryFormEl.elements.contractPrice.value : ""
+  };
+
+  deliveryFormEl.reset();
+  if (currentConfig) {
+    renderReceiptSelectors(currentConfig);
+  }
+
+  if (preserveContext) {
+    setSelectValue(deliveryReceiptSelect, [preservedValues.receiptId]);
+    setSelectValue(deliveryCustomerSelect, [preservedValues.customerId]);
+    deliveryFormEl.elements.contractNumber.value = preservedValues.contractNumber || "";
+    deliveryFormEl.elements.contractDate.value = preservedValues.contractDate || "";
+    deliveryFormEl.elements.contractPrice.value = preservedValues.contractPrice || "";
+  }
+
+  deliveryFormEl.elements.deliveredQuantity.value = "";
+  deliveryFormEl.elements.vehicle.value = "";
+  deliveryFormEl.elements.invoiceNumber.value = "";
+  deliveryFormEl.elements.note.value = "";
+  renderDeliveryPreview();
+  deliveryFormEl.elements.deliveredQuantity.focus();
 }
 
 async function createOpeningDocument(formData) {
@@ -1855,11 +2015,16 @@ async function createProcessing(formData) {
 }
 
 function getTransactionReferenceType() {
-  return transactionReferenceTypeSelect.value === "delivery" ? "delivery" : "receipt";
+  return transactionReferenceTypeSelect.value === "delivery"
+    ? "delivery"
+    : transactionReferenceTypeSelect.value === "opening-debt"
+      ? "opening-debt"
+      : "receipt";
 }
 
 function renderTransactionReferenceOptions() {
   const referenceType = getTransactionReferenceType();
+  const currentReferenceValue = transactionReferenceSelect.value;
 
   if (referenceType === "delivery") {
     renderSelectOptions(
@@ -1869,9 +2034,7 @@ function renderTransactionReferenceOptions() {
       "Selecteaza livrarea"
     );
 
-    if (deliveriesCache.length > 0) {
-      transactionReferenceSelect.value = String(deliveriesCache[0].id);
-    }
+    setSelectValue(transactionReferenceSelect, [currentReferenceValue, deliveriesCache[0]?.id]);
 
     return;
   }
@@ -1887,9 +2050,10 @@ function renderTransactionReferenceOptions() {
       (item) => item.openingDebtId
     );
 
-    if (openingDebtItems.length > 0) {
-      transactionReferenceSelect.value = String(openingDebtItems[0].openingDebtId);
-    }
+    setSelectValue(
+      transactionReferenceSelect,
+      [currentReferenceValue, openingDebtItems[0]?.openingDebtId]
+    );
 
     return;
   }
@@ -1901,8 +2065,27 @@ function renderTransactionReferenceOptions() {
     "Selecteaza receptia"
   );
 
-  if (receiptsCache.length > 0) {
-    transactionReferenceSelect.value = String(receiptsCache[0].id);
+  setSelectValue(transactionReferenceSelect, [currentReferenceValue, receiptsCache[0]?.id]);
+}
+
+function getTransactionDirectionLabel(direction) {
+  return direction === "collection" ? "Incasare" : "Plata";
+}
+
+function syncTransactionDirection() {
+  const referenceType = getTransactionReferenceType();
+  let direction = "payment";
+
+  if (referenceType === "delivery") {
+    direction = "collection";
+  } else if (referenceType === "opening-debt") {
+    const openingDebt = getSelectedOpeningDebtForTransaction();
+    direction = openingDebt?.direction === "collection" ? "collection" : "payment";
+  }
+
+  transactionDirectionSelect.value = direction;
+  if (transactionDirectionChipEl) {
+    transactionDirectionChipEl.textContent = getTransactionDirectionLabel(direction);
   }
 }
 
@@ -2216,7 +2399,11 @@ document.querySelectorAll(".view-tab").forEach((button) => {
   button.addEventListener("click", () => setView(button.dataset.view));
 });
 
-productSelect.addEventListener("change", syncUnitByProduct);
+productSelect.addEventListener("change", () => {
+  humidityInput.value = "";
+  impurityInput.value = "";
+  syncUnitByProduct();
+});
 supplierSelect.addEventListener("change", renderReceiptEstimate);
 humidityInput.addEventListener("input", renderReceiptEstimate);
 impurityInput.addEventListener("input", renderReceiptEstimate);
@@ -2231,10 +2418,13 @@ processedQuantityInput.addEventListener("input", renderProcessingEstimate);
 confirmedWasteInput.addEventListener("input", renderProcessingEstimate);
 transactionReferenceTypeSelect.addEventListener("change", () => {
   renderTransactionReferenceOptions();
+  syncTransactionDirection();
   renderTransactionPreview();
 });
-transactionReferenceSelect.addEventListener("change", renderTransactionPreview);
-transactionDirectionSelect.addEventListener("change", renderTransactionPreview);
+transactionReferenceSelect.addEventListener("change", () => {
+  syncTransactionDirection();
+  renderTransactionPreview();
+});
 openReceiptStatusFilterEl.addEventListener("change", renderOpenJournal);
 openDeliveryStatusFilterEl.addEventListener("change", renderOpenJournal);
 openPartnerFilterEl.addEventListener("input", renderOpenJournal);
@@ -2294,12 +2484,18 @@ addOpeningDebtButton.addEventListener("click", () => {
 formEl.addEventListener("submit", async (event) => {
   event.preventDefault();
   messageEl.textContent = "Se salveaza...";
+  const submitMode = getFormSubmitMode(formEl);
+  const formData = new FormData(formEl);
+  const validationError = validateReceiptForm(formData);
+
+  if (validationError) {
+    messageEl.textContent = validationError;
+    return;
+  }
 
   try {
-    await createReceipt(new FormData(formEl));
-    formEl.reset();
-    syncUnitByProduct();
-    renderReceiptEstimate();
+    await createReceipt(formData);
+    resetReceiptForm(submitMode);
     messageEl.textContent = "Receptia a fost salvata.";
     await Promise.all([
       loadReceipts(),
@@ -2364,11 +2560,18 @@ processingFormEl.addEventListener("submit", async (event) => {
 transactionFormEl.addEventListener("submit", async (event) => {
   event.preventDefault();
   transactionMessageEl.textContent = "Se salveaza...";
+  const submitMode = getFormSubmitMode(transactionFormEl);
+  const formData = new FormData(transactionFormEl);
+  const validationError = validateTransactionForm(formData);
+
+  if (validationError) {
+    transactionMessageEl.textContent = validationError;
+    return;
+  }
 
   try {
-    await createTransaction(new FormData(transactionFormEl));
-    transactionFormEl.reset();
-    renderTransactionPreview();
+    await createTransaction(formData);
+    resetTransactionForm(submitMode);
     transactionMessageEl.textContent = "Tranzactia a fost salvata.";
     await Promise.all([
       loadOpeningDocuments(),
@@ -2386,10 +2589,18 @@ transactionFormEl.addEventListener("submit", async (event) => {
 deliveryFormEl.addEventListener("submit", async (event) => {
   event.preventDefault();
   deliveryMessageEl.textContent = "Se salveaza...";
+  const submitMode = getFormSubmitMode(deliveryFormEl);
+  const formData = new FormData(deliveryFormEl);
+  const validationError = validateDeliveryForm(formData);
+
+  if (validationError) {
+    deliveryMessageEl.textContent = validationError;
+    return;
+  }
 
   try {
-    await createDelivery(new FormData(deliveryFormEl));
-    deliveryFormEl.reset();
+    await createDelivery(formData);
+    resetDeliveryForm(submitMode);
     deliveryMessageEl.textContent = "Livrarea a fost salvata.";
     await Promise.all([
       loadReceipts(),
@@ -2403,6 +2614,21 @@ deliveryFormEl.addEventListener("submit", async (event) => {
   } catch (error) {
     deliveryMessageEl.textContent = error.message;
   }
+});
+
+receiptSaveNewButton.addEventListener("click", () => {
+  formEl.dataset.submitMode = "save-new";
+  formEl.requestSubmit();
+});
+
+transactionSaveNewButton.addEventListener("click", () => {
+  transactionFormEl.dataset.submitMode = "save-new";
+  transactionFormEl.requestSubmit();
+});
+
+deliverySaveNewButton.addEventListener("click", () => {
+  deliveryFormEl.dataset.submitMode = "save-new";
+  deliveryFormEl.requestSubmit();
 });
 
 complaintFormEl.addEventListener("submit", async (event) => {

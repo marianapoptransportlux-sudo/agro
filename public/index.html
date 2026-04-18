@@ -256,7 +256,7 @@
           <form class="panel form-panel" id="receipt-form" data-access="receipt-write">
             <div class="panel-head">
               <h2>Receptie noua</h2>
-              <p>Formular conectat la parteneri, produse si locatii configurate</p>
+              <p>Operatorul introduce rapid doar datele primare, restul ramane optional.</p>
             </div>
 
             <label>
@@ -283,7 +283,8 @@
             <div class="split">
               <label>
                 Pret / unitate
-                <input name="price" type="number" min="0" step="0.01" required />
+                <input name="price" type="number" min="0" step="0.01" placeholder="0 daca se completeaza ulterior" />
+                <span class="field-hint">Optional. Daca lipseste, ramane 0 si se poate completa ulterior.</span>
               </label>
               <label>
                 Locatie initiala
@@ -294,29 +295,34 @@
             <div class="split">
               <label>
                 Umiditate %
-                <input name="humidity" id="humidity-input" type="number" min="0" step="0.01" required />
+                <input name="humidity" id="humidity-input" type="number" min="0" step="0.01" />
+                <span class="field-hint">Se completeaza automat din norma produsului daca il lasi gol.</span>
               </label>
               <label>
                 Impuritati %
-                <input name="impurity" id="impurity-input" type="number" min="0" step="0.01" required />
+                <input name="impurity" id="impurity-input" type="number" min="0" step="0.01" />
+                <span class="field-hint">Se completeaza automat din norma produsului daca il lasi gol.</span>
               </label>
             </div>
 
-            <div class="split">
-              <label>
-                Vehicul
-                <input name="vehicle" placeholder="Ex: CTC-204" />
-              </label>
-              <label>
-                Receptionat de
-                <select name="receivedBy" id="user-select"></select>
-              </label>
-            </div>
+            <details class="optional-fields">
+              <summary>Detalii optionale</summary>
+              <div class="split">
+                <label>
+                  Vehicul
+                  <input name="vehicle" placeholder="Ex: CTC-204" />
+                </label>
+                <label>
+                  Receptionat de
+                  <select name="receivedBy" id="user-select"></select>
+                </label>
+              </div>
 
-            <label>
-              Observatii
-              <textarea name="note" rows="4" placeholder="Calitate, umiditate, remarci"></textarea>
-            </label>
+              <label>
+                Observatii
+                <textarea name="note" rows="3" placeholder="Calitate, observatii, mentiuni"></textarea>
+              </label>
+            </details>
 
             <section class="estimate-panel" id="receipt-estimate">
               <div class="estimate-card">
@@ -341,7 +347,12 @@
               </div>
             </section>
 
-            <button type="submit">Salveaza receptia</button>
+            <div class="form-actions">
+              <button type="submit">Salveaza</button>
+              <button type="button" class="ghost-button secondary-submit" id="receipt-save-new-button">
+                Salveaza si nou
+              </button>
+            </div>
             <p class="form-message" id="form-message"></p>
           </form>
 
@@ -493,7 +504,7 @@
           <form class="panel form-panel" id="transaction-form">
             <div class="panel-head">
               <h2>Plata / incasare</h2>
-              <p>Jurnal financiar simplu pe receptie si partener</p>
+              <p>Flux rapid pentru plata furnizorului sau incasarea de la client.</p>
             </div>
 
             <label>
@@ -513,10 +524,9 @@
             <div class="split">
               <label>
                 Tip operatie
-                <select name="direction" id="transaction-direction-select">
-                  <option value="payment">Plata</option>
-                  <option value="collection">Incasare</option>
-                </select>
+                <div class="readonly-chip" id="transaction-direction-chip">Plata</div>
+                <input type="hidden" name="direction" id="transaction-direction-select" value="payment" />
+                <span class="field-hint">Se completeaza automat in functie de referinta aleasa.</span>
               </label>
               <label>
                 Tip plata
@@ -524,26 +534,21 @@
               </label>
             </div>
 
-            <label>
-              Status tranzactie
-              <select name="status">
-                <option value="Confirmat">Confirmat</option>
-                <option value="Inchis">Inchis</option>
-                <option value="Anulat">Anulat</option>
-                <option value="Redeschis">Redeschis</option>
-              </select>
-            </label>
-
             <div class="split">
               <label>
                 Suma
                 <input name="amount" type="number" min="0" step="0.01" required />
               </label>
+              <div></div>
+            </div>
+
+            <details class="optional-fields">
+              <summary>Detalii optionale</summary>
               <label>
                 Observatii
                 <input name="note" placeholder="Comentariu financiar" />
               </label>
-            </div>
+            </details>
 
             <section class="estimate-panel">
               <div class="estimate-card">
@@ -560,7 +565,12 @@
               </div>
             </section>
 
-            <button type="submit">Salveaza tranzactia</button>
+            <div class="form-actions">
+              <button type="submit">Salveaza</button>
+              <button type="button" class="ghost-button secondary-submit" id="transaction-save-new-button">
+                Salveaza si nou
+              </button>
+            </div>
             <p class="form-message" id="transaction-message"></p>
           </form>
 
@@ -591,18 +601,9 @@
           <form class="panel form-panel" id="delivery-form" data-access="delivery-write">
               <div class="panel-head">
                 <h2>Livrare / iesire din stoc</h2>
-                <p>Scadere din stoc la cantitatea reala incarcata</p>
+                <p>Formular scurt pentru iesirea reala din stoc, cu detalii comerciale optionale.</p>
               </div>
-
-            <label>
-              Status livrare
-              <select name="status">
-                <option value="Confirmat">Confirmat</option>
-                <option value="Inchis">Inchis</option>
-                <option value="Anulat">Anulat</option>
-                <option value="Redeschis">Redeschis</option>
-              </select>
-            </label>
+            <input type="hidden" name="status" value="Confirmat" />
 
             <label>
               Receptie sursa
@@ -619,38 +620,44 @@
                 Cantitate livrata
                 <input name="deliveredQuantity" id="delivery-quantity-input" type="number" min="0" step="0.01" required />
               </label>
-              <label>
-                Vehicul
-                <input name="vehicle" placeholder="Ex: AG-102" />
-              </label>
+              <div></div>
             </div>
 
-            <div class="split">
-              <label>
-                Nr. contract
-                <input name="contractNumber" placeholder="Contract" />
-              </label>
-              <label>
-                Data contract
-                <input name="contractDate" type="date" />
-              </label>
-            </div>
+            <details class="optional-fields">
+              <summary>Detalii optionale</summary>
+              <div class="split">
+                <label>
+                  Vehicul
+                  <input name="vehicle" placeholder="Ex: AG-102" />
+                </label>
+                <label>
+                  Invoice / factura
+                  <input name="invoiceNumber" placeholder="Invoice / Factura" />
+                </label>
+              </div>
 
-            <div class="split">
-              <label>
-                Pret contract
-                <input name="contractPrice" type="number" min="0" step="0.01" />
-              </label>
-              <label>
-                Invoice / factura
-                <input name="invoiceNumber" placeholder="Invoice / Factura" />
-              </label>
-            </div>
+              <div class="split">
+                <label>
+                  Nr. contract
+                  <input name="contractNumber" placeholder="Contract" />
+                </label>
+                <label>
+                  Data contract
+                  <input name="contractDate" type="date" />
+                </label>
+              </div>
 
-            <label>
-              Observatii
-              <input name="note" placeholder="Comentariu livrare" />
-            </label>
+              <div class="split">
+                <label>
+                  Pret contract
+                  <input name="contractPrice" type="number" min="0" step="0.01" />
+                </label>
+                <label>
+                  Observatii
+                  <input name="note" placeholder="Comentariu livrare" />
+                </label>
+              </div>
+            </details>
 
             <section class="estimate-panel">
               <div class="estimate-card">
@@ -667,7 +674,12 @@
               </div>
             </section>
 
-            <button type="submit">Salveaza livrarea</button>
+            <div class="form-actions">
+              <button type="submit">Salveaza</button>
+              <button type="button" class="ghost-button secondary-submit" id="delivery-save-new-button">
+                Salveaza si nou
+              </button>
+            </div>
             <p class="form-message" id="delivery-message"></p>
           </form>
 

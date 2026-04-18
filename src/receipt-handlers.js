@@ -102,9 +102,9 @@ async function createReceiptHandler(req, res) {
   const actor = getActorLabel(req);
   const { quantity, price, humidity, impurity } = body;
 
-  if (!body.supplierId || !body.productId || !quantity || !price) {
+  if (!body.supplierId || !body.productId || quantity === undefined || quantity === "") {
     return sendJson(res, 400, {
-      error: "Campurile supplierId, productId, quantity si price sunt obligatorii."
+      error: "Campurile supplierId, productId si quantity sunt obligatorii."
     });
   }
 
@@ -131,17 +131,39 @@ async function createReceiptHandler(req, res) {
       return sendJson(res, 400, { error: "Locatia selectata nu exista." });
     }
 
-    if (humidity === undefined || impurity === undefined || humidity === "" || impurity === "") {
-      return sendJson(res, 400, {
-        error: "Campurile humidity si impurity sunt obligatorii pentru receptie."
-      });
+    const normalizedQuantity = Number(quantity);
+    const normalizedPrice =
+      price === undefined || price === null || price === "" ? 0 : Number(price);
+    const normalizedHumidity =
+      humidity === undefined || humidity === null || humidity === ""
+        ? Number(product.humidityNorm || 0)
+        : Number(humidity);
+    const normalizedImpurity =
+      impurity === undefined || impurity === null || impurity === ""
+        ? Number(product.impurityNorm || 0)
+        : Number(impurity);
+
+    if (!Number.isFinite(normalizedQuantity) || normalizedQuantity <= 0) {
+      return sendJson(res, 400, { error: "Cantitatea trebuie sa fie mai mare ca zero." });
+    }
+
+    if (!Number.isFinite(normalizedPrice) || normalizedPrice < 0) {
+      return sendJson(res, 400, { error: "Pretul nu poate fi negativ." });
+    }
+
+    if (!Number.isFinite(normalizedHumidity) || normalizedHumidity < 0) {
+      return sendJson(res, 400, { error: "Umiditatea trebuie sa fie o valoare valida." });
+    }
+
+    if (!Number.isFinite(normalizedImpurity) || normalizedImpurity < 0) {
+      return sendJson(res, 400, { error: "Impuritatile trebuie sa fie o valoare valida." });
     }
 
     const estimate = computeReceiptEstimate({
-      quantity,
-      price,
-      humidity,
-      impurity,
+      quantity: normalizedQuantity,
+      price: normalizedPrice,
+      humidity: normalizedHumidity,
+      impurity: normalizedImpurity,
       product,
       tariffs: config.tariffs,
       fiscalProfile
@@ -149,6 +171,8 @@ async function createReceiptHandler(req, res) {
 
     const receipt = await createReceipt({
       ...body,
+      quantity: normalizedQuantity,
+      price: normalizedPrice,
       supplier: partner.name,
       product: product.name,
       unit: product.unit,
