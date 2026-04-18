@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
+    "test": "node --test --test-isolation=none test/*.test.js",
     "backups:list": "node scripts/runtime-backup-cli.js list",
     "backups:restore": "node scripts/runtime-backup-cli.js restore"
   },
