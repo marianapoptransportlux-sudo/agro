@@ -403,7 +403,19 @@ function buildManagementTelegramReportMessages(snapshot) {
   ];
 }
 
+function buildManagementDetailMessages(snapshot) {
+  return [
+    buildOperationalFocusMessage(snapshot),
+    buildFinancialExposureMessage(snapshot),
+    buildComplaintsMessage(snapshot),
+    buildOpenDocumentsMessage(snapshot),
+    buildTopExceptionsMessage(snapshot),
+    buildRecentChangesMessage(snapshot)
+  ];
+}
+
 module.exports = {
+  buildManagementDetailMessages,
   buildManagementTelegramReportMessages,
   formatCurrency,
   formatNumber,

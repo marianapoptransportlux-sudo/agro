@@ -139,7 +139,10 @@ async function runCloseOfDayAutomation(options = {}) {
       openingDebtItems,
       dateValue
     });
-    const messages = buildManagementTelegramReportMessages(snapshot);
+    const messages = [
+      ...buildManagementTelegramReportMessages(snapshot),
+      { reportActionDate: dateValue }
+    ];
 
     const sentCount = await sendTelegramMessagesToAudience(audience, messages);
     if (sentCount > 0) {

@@ -8,7 +8,8 @@ const defaultAutomationState = {
   telegramLinks: {},
   reports: {
     closeOfDay: {
-      lastSentDate: ""
+      lastSentDate: "",
+      actions: {}
     }
   }
 };
@@ -39,7 +40,11 @@ function readAutomationState() {
       ...(parsed.reports || {}),
       closeOfDay: {
         ...defaultAutomationState.reports.closeOfDay,
-        ...(parsed.reports?.closeOfDay || {})
+        ...(parsed.reports?.closeOfDay || {}),
+        actions: {
+          ...defaultAutomationState.reports.closeOfDay.actions,
+          ...(parsed.reports?.closeOfDay?.actions || {})
+        }
       }
     }
   };
@@ -89,6 +94,106 @@ function getTelegramLinksForUsernames(usernames = []) {
     .filter(Boolean);
 }
 
+function getTelegramLinkByChatId(chatId) {
+  const normalizedChatId = String(chatId || "").trim();
+  if (!normalizedChatId) {
+    return null;
+  }
+
+  const state = readAutomationState();
+  return (
+    Object.values(state.telegramLinks).find(
+      (item) => String(item?.chatId || "").trim() === normalizedChatId
+    ) || null
+  );
+}
+
+function getCloseOfDayReportActionState(dateValue) {
+  const normalizedDate = String(dateValue || "").trim();
+  if (!normalizedDate) {
+    return {
+      date: "",
+      confirmations: {},
+      resolutions: {},
+      detailRequests: [],
+      reruns: [],
+      lastAction: null
+    };
+  }
+
+  const state = readAutomationState();
+  const actionState = state.reports.closeOfDay.actions?.[normalizedDate] || {};
+  return {
+    date: normalizedDate,
+    confirmations: { ...(actionState.confirmations || {}) },
+    resolutions: { ...(actionState.resolutions || {}) },
+    detailRequests: Array.isArray(actionState.detailRequests) ? [...actionState.detailRequests] : [],
+    reruns: Array.isArray(actionState.reruns) ? [...actionState.reruns] : [],
+    lastAction: actionState.lastAction || null
+  };
+}
+
+function recordCloseOfDayReportAction(dateValue, username, actionType, extra = {}) {
+  const normalizedDate = String(dateValue || "").trim();
+  const normalizedUsername = String(username || "").trim().toLowerCase();
+  const normalizedActionType = String(actionType || "").trim().toLowerCase();
+
+  if (!normalizedDate || !normalizedUsername || !normalizedActionType) {
+    return getCloseOfDayReportActionState(normalizedDate);
+  }
+
+  const state = readAutomationState();
+  const existing = state.reports.closeOfDay.actions?.[normalizedDate] || {
+    confirmations: {},
+    resolutions: {},
+    detailRequests: [],
+    reruns: [],
+    lastAction: null
+  };
+  const timestamp = new Date().toISOString();
+
+  const next = {
+    confirmations: { ...(existing.confirmations || {}) },
+    resolutions: { ...(existing.resolutions || {}) },
+    detailRequests: Array.isArray(existing.detailRequests) ? [...existing.detailRequests] : [],
+    reruns: Array.isArray(existing.reruns) ? [...existing.reruns] : [],
+    lastAction: {
+      type: normalizedActionType,
+      username: normalizedUsername,
+      at: timestamp
+    }
+  };
+
+  if (normalizedActionType === "confirm") {
+    next.confirmations[normalizedUsername] = timestamp;
+  }
+
+  if (normalizedActionType === "resolve") {
+    next.resolutions[normalizedUsername] = timestamp;
+  }
+
+  if (normalizedActionType === "details") {
+    next.detailRequests.unshift({
+      username: normalizedUsername,
+      at: timestamp,
+      note: String(extra.note || "").trim()
+    });
+    next.detailRequests = next.detailRequests.slice(0, 25);
+  }
+
+  if (normalizedActionType === "run") {
+    next.reruns.unshift({
+      username: normalizedUsername,
+      at: timestamp
+    });
+    next.reruns = next.reruns.slice(0, 25);
+  }
+
+  state.reports.closeOfDay.actions[normalizedDate] = next;
+  writeAutomationState(state);
+  return getCloseOfDayReportActionState(normalizedDate);
+}
+
 function getLastCloseOfDaySentDate() {
   return readAutomationState().reports.closeOfDay.lastSentDate || "";
 }
@@ -106,10 +211,13 @@ function markCloseOfDaySent(dateValue) {
 }
 
 module.exports = {
+  getCloseOfDayReportActionState,
   getLastCloseOfDaySentDate,
+  getTelegramLinkByChatId,
   getTelegramLink,
   getTelegramLinksForUsernames,
   linkTelegramUser,
   markCloseOfDaySent,
+  recordCloseOfDayReportAction,
   readAutomationState
 };

@@ -1,5 +1,6 @@
-const { Telegraf } = require("telegraf");
+const { Markup, Telegraf } = require("telegraf");
 const {
+  appendAuditLog,
   createReceipt,
   findUserByUsername,
   getDailyReport,
@@ -9,8 +10,15 @@ const {
   listOpeningDebtItems,
   listReceipts
 } = require("./storage");
-const { getTelegramLinksForUsernames, linkTelegramUser } = require("./automation-state");
 const {
+  getCloseOfDayReportActionState,
+  getTelegramLinkByChatId,
+  getTelegramLinksForUsernames,
+  linkTelegramUser,
+  recordCloseOfDayReportAction
+} = require("./automation-state");
+const {
+  buildManagementDetailMessages,
   buildManagementTelegramReportMessages,
   getManagementSnapshot
 } = require("./management-report");
@@ -98,7 +106,103 @@ function createReceiptMessage(receipt) {
 
 async function replyWithMessages(ctx, messages) {
   for (const message of messages.filter(Boolean)) {
-    await ctx.reply(message);
+    const payload = typeof message === "string" ? { text: message } : message;
+    if (!payload?.text) {
+      continue;
+    }
+
+    await ctx.reply(payload.text, payload.extra || undefined);
+  }
+}
+
+async function loadManagementSnapshot(dateValue) {
+  const [report, receipts, deliveries, complaints, auditLogs, openingDebtItems] = await Promise.all([
+    getDailyReport(dateValue),
+    listReceipts(),
+    listDeliveries(),
+    listComplaints(),
+    listAuditLogs(),
+    listOpeningDebtItems()
+  ]);
+
+  return getManagementSnapshot({
+    report,
+    receipts,
+    deliveries,
+    complaints,
+    auditLogs,
+    openingDebtItems,
+    dateValue
+  });
+}
+
+function createReportActionKeyboard(dateValue) {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback("Confirma", `cdr:confirm:${dateValue}`),
+      Markup.button.callback("Cere detalii", `cdr:details:${dateValue}`)
+    ],
+    [
+      Markup.button.callback("Marcheaza rezolvat", `cdr:resolve:${dateValue}`),
+      Markup.button.callback("Ruleaza raport acum", `cdr:run:${dateValue}`)
+    ]
+  ]);
+}
+
+function createReportActionMessage(dateValue, username = "") {
+  const actionState = getCloseOfDayReportActionState(dateValue);
+  const normalizedUsername = String(username || "").trim().toLowerCase();
+  const confirmed = Boolean(actionState.confirmations[normalizedUsername]);
+  const resolved = Boolean(actionState.resolutions[normalizedUsername]);
+  const confirmationCount = Object.keys(actionState.confirmations).length;
+  const resolutionCount = Object.keys(actionState.resolutions).length;
+  const detailCount = actionState.detailRequests.length;
+  const rerunCount = actionState.reruns.length;
+  const lastAction = actionState.lastAction
+    ? `${actionState.lastAction.type} de ${actionState.lastAction.username} la ${String(actionState.lastAction.at)
+        .replace("T", " ")
+        .slice(0, 16)}`
+    : "nicio actiune inregistrata";
+
+  return {
+    text: [
+      `Actiuni rapide pentru raportul ${dateValue}:`,
+      `Confirmari: ${confirmationCount} | Cereri detalii: ${detailCount} | Marcari rezolvat: ${resolutionCount} | Rulari manuale: ${rerunCount}`,
+      `Tu: confirmat ${confirmed ? "da" : "nu"} | rezolvat ${resolved ? "da" : "nu"}`,
+      `Ultima actiune: ${lastAction}`
+    ].join("\n"),
+    extra: createReportActionKeyboard(dateValue)
+  };
+}
+
+async function appendTelegramActionAudit(username, action, dateValue, details = {}) {
+  await appendAuditLog({
+    entityType: "automation",
+    entityId: 1,
+    action: `telegram-${action}`,
+    reason: `Actiune Telegram close-of-day: ${action}`,
+    user: username || "telegram",
+    newValue: {
+      date: dateValue,
+      ...details
+    }
+  });
+}
+
+function resolveLinkedUsername(ctx) {
+  const linkedUser = getTelegramLinkByChatId(ctx.chat?.id);
+  return String(linkedUser?.username || "").trim().toLowerCase();
+}
+
+async function refreshReportActionMessage(ctx, dateValue, username) {
+  const payload = createReportActionMessage(dateValue, username);
+
+  try {
+    await ctx.editMessageText(payload.text, payload.extra);
+  } catch (error) {
+    if (!String(error.message || "").toLowerCase().includes("message is not modified")) {
+      console.error("Failed to refresh report action panel:", error.message);
+    }
   }
 }
 
@@ -243,13 +347,38 @@ async function sendTelegramMessagesToAudience(usernames = [], messages = []) {
   }
 
   const links = getTelegramLinksForUsernames(usernames);
-  const chatIds = Array.from(new Set(links.map((item) => String(item.chatId || "").trim()).filter(Boolean)));
+  const chatTargets = Array.from(
+    new Map(
+      links
+        .map((item) => [String(item.chatId || "").trim(), item])
+        .filter(([chatId]) => Boolean(chatId))
+    ).values()
+  );
   let sentCount = 0;
 
-  for (const chatId of chatIds) {
-    for (const message of messages) {
-      await activeBot.telegram.sendMessage(chatId, message);
+  for (const target of chatTargets) {
+    const payloads = messages
+      .filter(Boolean)
+      .map((message) => {
+        if (typeof message === "string") {
+          return { text: message };
+        }
+
+        if (message?.reportActionDate) {
+          return createReportActionMessage(message.reportActionDate, target.username);
+        }
+
+        return message;
+      });
+
+    for (const payload of payloads) {
+      if (!payload?.text) {
+        continue;
+      }
+
+      await activeBot.telegram.sendMessage(target.chatId, payload.text, payload.extra || undefined);
     }
+
     sentCount += 1;
   }
 
@@ -293,27 +422,62 @@ function startBot(token) {
         return ctx.reply("Data trebuie sa fie in formatul YYYY-MM-DD.");
       }
 
-      const [report, receipts, deliveries, complaints, auditLogs, openingDebtItems] = await Promise.all([
-        getDailyReport(dateValue),
-        listReceipts(),
-        listDeliveries(),
-        listComplaints(),
-        listAuditLogs(),
-        listOpeningDebtItems()
-      ]);
-      const snapshot = getManagementSnapshot({
-        report,
-        receipts,
-        deliveries,
-        complaints,
-        auditLogs,
-        openingDebtItems,
-        dateValue
-      });
-      return replyWithMessages(ctx, buildManagementTelegramReportMessages(snapshot));
+      const snapshot = await loadManagementSnapshot(dateValue);
+      await replyWithMessages(ctx, buildManagementTelegramReportMessages(snapshot));
+      const actionPayload = createReportActionMessage(dateValue, resolveLinkedUsername(ctx));
+      return ctx.reply(actionPayload.text, actionPayload.extra);
     } catch (error) {
       console.error("Failed to build Telegram daily report:", error.message);
       return ctx.reply("Nu am putut genera raportul zilnic.");
+    }
+  });
+
+  bot.action(/^cdr:(confirm|details|resolve|run):(\d{4}-\d{2}-\d{2})$/, async (ctx) => {
+    const [, action, dateValue] = ctx.match || [];
+    const username = resolveLinkedUsername(ctx);
+
+    if (!username) {
+      await ctx.answerCbQuery("Leaga mai intai contul intern cu /start.", { show_alert: true });
+      return;
+    }
+
+    try {
+      recordCloseOfDayReportAction(dateValue, username, action);
+      await appendTelegramActionAudit(username, action, dateValue, {
+        chatId: String(ctx.chat?.id || "").trim()
+      });
+
+      if (action === "confirm") {
+        await refreshReportActionMessage(ctx, dateValue, username);
+        await ctx.answerCbQuery("Raport confirmat.");
+        return;
+      }
+
+      if (action === "resolve") {
+        await refreshReportActionMessage(ctx, dateValue, username);
+        await ctx.answerCbQuery("Raport marcat rezolvat.");
+        return;
+      }
+
+      if (action === "details") {
+        const snapshot = await loadManagementSnapshot(dateValue);
+        await refreshReportActionMessage(ctx, dateValue, username);
+        await ctx.answerCbQuery("Trimit detaliile.");
+        await replyWithMessages(ctx, buildManagementDetailMessages(snapshot));
+        return;
+      }
+
+      if (action === "run") {
+        const snapshot = await loadManagementSnapshot(dateValue);
+        await refreshReportActionMessage(ctx, dateValue, username);
+        await ctx.answerCbQuery("Rulez raportul.");
+        await replyWithMessages(ctx, buildManagementTelegramReportMessages(snapshot));
+        const actionPayload = createReportActionMessage(dateValue, username);
+        await ctx.reply(actionPayload.text, actionPayload.extra);
+      }
+    } catch (error) {
+      console.error("Telegram quick action failed:", error.message);
+      await ctx.answerCbQuery("Actiunea nu a reusit.", { show_alert: true });
     }
   });
 
