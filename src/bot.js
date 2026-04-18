@@ -6,9 +6,14 @@ const {
   listAuditLogs,
   listComplaints,
   listDeliveries,
+  listOpeningDebtItems,
   listReceipts
 } = require("./storage");
 const { getTelegramLinksForUsernames, linkTelegramUser } = require("./automation-state");
+const {
+  buildManagementTelegramReportMessages,
+  getManagementSnapshot
+} = require("./management-report");
 
 const sessions = new Map();
 let activeBot = null;
@@ -91,17 +96,10 @@ function createReceiptMessage(receipt) {
   ].join("\n");
 }
 
-function createDailyReportMessage(report) {
-  return [
-    `Raport zilnic ${report.date}`,
-    `Receptii: ${report.summary.receiptsCount} | Brut: ${formatNumber(report.summary.grossQuantity)} t`,
-    `Net provizoriu: ${formatNumber(report.summary.provisionalNetQuantity)} t`,
-    `Procesari: ${report.processings.length} | Cantitate: ${formatNumber(report.summary.processedQuantity)} t`,
-    `Livrari: ${report.deliveries.length} | Cantitate: ${formatNumber(report.summary.deliveredQuantity)} t`,
-    `Plati: ${formatCurrency(report.summary.paymentsTotal)} | Incasari: ${formatCurrency(report.summary.collectionsTotal)}`,
-    `Reclamatii deschise: ${report.summary.openComplaints}`,
-    `Stoc total: ${formatNumber(report.summary.stockTotal)} t`
-  ].join("\n");
+async function replyWithMessages(ctx, messages) {
+  for (const message of messages.filter(Boolean)) {
+    await ctx.reply(message);
+  }
 }
 
 function createOpenDocumentsMessage(receipts, deliveries) {
@@ -295,8 +293,24 @@ function startBot(token) {
         return ctx.reply("Data trebuie sa fie in formatul YYYY-MM-DD.");
       }
 
-      const report = await getDailyReport(dateValue);
-      return ctx.reply(createDailyReportMessage(report));
+      const [report, receipts, deliveries, complaints, auditLogs, openingDebtItems] = await Promise.all([
+        getDailyReport(dateValue),
+        listReceipts(),
+        listDeliveries(),
+        listComplaints(),
+        listAuditLogs(),
+        listOpeningDebtItems()
+      ]);
+      const snapshot = getManagementSnapshot({
+        report,
+        receipts,
+        deliveries,
+        complaints,
+        auditLogs,
+        openingDebtItems,
+        dateValue
+      });
+      return replyWithMessages(ctx, buildManagementTelegramReportMessages(snapshot));
     } catch (error) {
       console.error("Failed to build Telegram daily report:", error.message);
       return ctx.reply("Nu am putut genera raportul zilnic.");

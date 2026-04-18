@@ -4,6 +4,7 @@ const {
   listAuditLogs,
   listComplaints,
   listDeliveries,
+  listOpeningDebtItems,
   listReceipts
 } = require("./storage");
 const {
@@ -12,27 +13,13 @@ const {
   markCloseOfDaySent
 } = require("./automation-state");
 const { sendTelegramMessagesToAudience, isBotReady } = require("./bot");
-
-const numberFormatter = new Intl.NumberFormat("ro-RO", {
-  maximumFractionDigits: 2
-});
-
-const currencyFormatter = new Intl.NumberFormat("ro-RO", {
-  style: "currency",
-  currency: "MDL",
-  maximumFractionDigits: 2
-});
+const {
+  buildManagementTelegramReportMessages,
+  getManagementSnapshot
+} = require("./management-report");
 
 let schedulerInterval = null;
 let schedulerRunning = false;
-
-function formatNumber(value) {
-  return numberFormatter.format(Number(value || 0));
-}
-
-function formatCurrency(value) {
-  return currencyFormatter.format(Number(value || 0));
-}
 
 function todayDateValue() {
   return new Date().toISOString().slice(0, 10);
@@ -94,106 +81,6 @@ async function getCloseOfDayStatus() {
   };
 }
 
-function buildSummaryMessage(report) {
-  return [
-    `Inchidere zi ${report.date}`,
-    `Receptii: ${report.summary.receiptsCount} | Brut: ${formatNumber(report.summary.grossQuantity)} t`,
-    `Net provizoriu: ${formatNumber(report.summary.provisionalNetQuantity)} t`,
-    `Procesat: ${formatNumber(report.summary.processedQuantity)} t | Deseu: ${formatNumber(report.summary.confirmedWaste)} t`,
-    `Livrat: ${formatNumber(report.summary.deliveredQuantity || 0)} t`,
-    `Plati: ${formatCurrency(report.summary.paymentsTotal || 0)} | Incasari: ${formatCurrency(report.summary.collectionsTotal || 0)}`,
-    `Stoc total: ${formatNumber(report.summary.stockTotal)} t`
-  ].join("\n");
-}
-
-function buildOpenDocumentsMessage(receipts, deliveries) {
-  const openReceipts = receipts
-    .filter((item) => !["Inchis", "Anulat", "Finalizata"].includes(String(item.status || "")))
-    .slice(0, 6);
-  const openDeliveries = deliveries
-    .filter((item) => !["Inchisa", "Anulata", "Finalizata"].includes(String(item.status || "")))
-    .slice(0, 6);
-
-  if (!openReceipts.length && !openDeliveries.length) {
-    return "Documente neinchise: niciun document deschis.";
-  }
-
-  return [
-    "Documente neinchise:",
-    ...openReceipts.map(
-      (item) =>
-        `R#${item.id} ${item.product} | ${item.supplier} | ${item.status} | ${formatNumber(item.provisionalNetQuantity || item.quantity)} ${item.unit}`
-    ),
-    ...openDeliveries.map(
-      (item) =>
-        `L#${item.id} ${item.product} | ${item.customer || "-"} | ${item.status} | ${formatNumber(item.deliveredQuantity)} t`
-    )
-  ].join("\n");
-}
-
-function buildOutstandingPaymentsMessage(receipts) {
-  const items = receipts
-    .map((receipt) => {
-      const paidAmount = Number(receipt.paidAmount || 0);
-      const targetAmount = Number(receipt.preliminaryPayableAmount || 0);
-      return {
-        ...receipt,
-        paymentStatus:
-          paidAmount <= 0 ? "Neachitat" : paidAmount < targetAmount ? "Partial" : "Achitat"
-      };
-    })
-    .filter((item) => item.paymentStatus === "Neachitat" || item.paymentStatus === "Partial")
-    .slice(0, 8);
-
-  if (!items.length) {
-    return "Loturi neachitate / partial achitate: nimic restant.";
-  }
-
-  return [
-    "Loturi neachitate / partial achitate:",
-    ...items.map(
-      (item) =>
-        `#${item.id} ${item.product} | ${item.supplier} | ${item.paymentStatus} | ${formatCurrency(item.preliminaryPayableAmount)}`
-    )
-  ].join("\n");
-}
-
-function buildComplaintsMessage(complaints) {
-  const openComplaints = complaints
-    .filter((item) => String(item.status || "").toLowerCase() === "deschisa")
-    .slice(0, 8);
-
-  if (!openComplaints.length) {
-    return "Reclamatii deschise: niciuna.";
-  }
-
-  return [
-    "Reclamatii deschise:",
-    ...openComplaints.map(
-      (item) =>
-        `#${item.id} ${item.product} | ${item.customer || "-"} | ${formatNumber(item.contestedQuantity)} t | ${item.complaintType}`
-    )
-  ].join("\n");
-}
-
-function buildRecentChangesMessage(auditLogs) {
-  const importantChanges = auditLogs
-    .filter((item) => item.action !== "create")
-    .slice(0, 8);
-
-  if (!importantChanges.length) {
-    return "Modificari importante recente: niciuna.";
-  }
-
-  return [
-    "Modificari importante recente:",
-    ...importantChanges.map((item) => {
-      const stamp = String(item.createdAt || "").replace("T", " ").slice(0, 16);
-      return `${stamp} | ${item.entityType} #${item.entityId || "-"} | ${item.action} | ${item.reason}`;
-    })
-  ].join("\n");
-}
-
 async function runCloseOfDayAutomation(options = {}) {
   if (schedulerRunning) {
     return { sent: false, reason: "already-running" };
@@ -234,21 +121,25 @@ async function runCloseOfDayAutomation(options = {}) {
       return { sent: false, reason: "bot-not-ready" };
     }
 
-    const [report, receipts, deliveries, complaints, auditLogs] = await Promise.all([
+    const [report, receipts, deliveries, complaints, auditLogs, openingDebtItems] = await Promise.all([
       getDailyReport(dateValue),
       listReceipts(),
       listDeliveries(),
       listComplaints(),
-      listAuditLogs()
+      listAuditLogs(),
+      listOpeningDebtItems()
     ]);
 
-    const messages = [
-      buildSummaryMessage(report),
-      buildOpenDocumentsMessage(receipts, deliveries),
-      buildOutstandingPaymentsMessage(receipts),
-      buildComplaintsMessage(complaints),
-      buildRecentChangesMessage(auditLogs)
-    ];
+    const snapshot = getManagementSnapshot({
+      report,
+      receipts,
+      deliveries,
+      complaints,
+      auditLogs,
+      openingDebtItems,
+      dateValue
+    });
+    const messages = buildManagementTelegramReportMessages(snapshot);
 
     const sentCount = await sendTelegramMessagesToAudience(audience, messages);
     if (sentCount > 0) {
