@@ -1,14 +1,17 @@
 const { Telegraf } = require("telegraf");
 const {
   createReceipt,
+  findUserByUsername,
   getDailyReport,
   listAuditLogs,
   listComplaints,
   listDeliveries,
   listReceipts
 } = require("./storage");
+const { getTelegramLinksForUsernames, linkTelegramUser } = require("./automation-state");
 
 const sessions = new Map();
+let activeBot = null;
 
 const steps = [
   { key: "supplier", question: "Furnizor:" },
@@ -208,15 +211,67 @@ function createHelpMessage() {
   ].join("\n");
 }
 
+async function tryLinkTelegramAccount(ctx) {
+  const telegramUsername = String(ctx.from?.username || "").trim().toLowerCase();
+  if (!telegramUsername) {
+    return "Seteaza un username Telegram pentru a lega contul intern si a primi rapoarte automate.";
+  }
+
+  const user = await findUserByUsername(telegramUsername);
+  if (!user) {
+    return `Nu exista utilizator intern cu username-ul ${telegramUsername}.`;
+  }
+
+  if (!String(user.channel || "").includes("telegram")) {
+    return `Utilizatorul ${telegramUsername} nu are activ canalul Telegram in sistem.`;
+  }
+
+  linkTelegramUser(user.username, {
+    chatId: ctx.chat?.id,
+    telegramUsername,
+    firstName: ctx.from?.first_name || ""
+  });
+
+  return `Canal Telegram activat pentru ${user.username}. Vei primi rapoarte automate daca esti inclus in audienta.`;
+}
+
+function isBotReady() {
+  return Boolean(activeBot);
+}
+
+async function sendTelegramMessagesToAudience(usernames = [], messages = []) {
+  if (!activeBot || !usernames.length || !messages.length) {
+    return 0;
+  }
+
+  const links = getTelegramLinksForUsernames(usernames);
+  const chatIds = Array.from(new Set(links.map((item) => String(item.chatId || "").trim()).filter(Boolean)));
+  let sentCount = 0;
+
+  for (const chatId of chatIds) {
+    for (const message of messages) {
+      await activeBot.telegram.sendMessage(chatId, message);
+    }
+    sentCount += 1;
+  }
+
+  return sentCount;
+}
+
 function startBot(token) {
   if (!token || token === "replace_me") {
     console.log("Telegram bot disabled: TELEGRAM_BOT_TOKEN is missing.");
+    activeBot = null;
     return null;
   }
 
   const bot = new Telegraf(token);
+  activeBot = bot;
 
-  bot.start((ctx) => ctx.reply(createHelpMessage()));
+  bot.start(async (ctx) => {
+    const linkMessage = await tryLinkTelegramAccount(ctx);
+    return ctx.reply([linkMessage, "", createHelpMessage()].join("\n"));
+  });
   bot.command("ajutor", (ctx) => ctx.reply(createHelpMessage()));
 
   bot.command("anuleaza", (ctx) => {
@@ -332,10 +387,15 @@ function startBot(token) {
       console.log("Telegram bot polling started.");
     })
     .catch((error) => {
+      activeBot = null;
       console.error("Telegram launch failed:", error.message);
     });
 
   return bot;
 }
 
-module.exports = { startBot };
+module.exports = {
+  isBotReady,
+  sendTelegramMessagesToAudience,
+  startBot
+};

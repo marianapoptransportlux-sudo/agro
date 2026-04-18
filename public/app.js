@@ -52,6 +52,10 @@ const editorMessageEl = document.getElementById("editor-message");
 const editorSaveButton = document.getElementById("editor-save");
 const editorCancelButton = document.getElementById("editor-cancel");
 const lockoutsBodyEl = document.getElementById("lockouts-body");
+const automationStatusSummaryEl = document.getElementById("automation-status-summary");
+const automationAudienceBodyEl = document.getElementById("automation-audience-body");
+const automationMessageEl = document.getElementById("automation-message");
+const runCloseOfDayButtonEl = document.getElementById("run-close-of-day-button");
 const estimateHumidityNormEl = document.getElementById("estimate-humidity-norm");
 const estimateImpurityNormEl = document.getElementById("estimate-impurity-norm");
 const estimateNetEl = document.getElementById("estimate-net");
@@ -137,6 +141,7 @@ let deliveriesCache = [];
 let complaintsCache = [];
 let auditLogsCache = [];
 let lockoutsCache = [];
+let automationStatusCache = null;
 let currentSessionUser = null;
 
 const nativeFetch = window.fetch.bind(window);
@@ -561,6 +566,50 @@ function renderStockSummary(summary) {
           <td>${item.product}</td>
           <td>${formatNumber(item.quantity)}</td>
           <td>${item.unit}</td>
+        </tr>
+      `
+    )
+    .join("");
+}
+
+function renderAutomationStatus(status) {
+  if (!automationStatusSummaryEl || !automationAudienceBodyEl) {
+    return;
+  }
+
+  if (!status) {
+    automationStatusSummaryEl.innerHTML = "";
+    automationAudienceBodyEl.innerHTML = "";
+    return;
+  }
+
+  const cards = [
+    ["Bot Telegram", status.botReady ? "Activ" : "Inactiv"],
+    ["Ultima trimitere", status.lastSentDate || "-"],
+    ["Programata azi", status.dueNow ? "Da" : "Nu"],
+    ["Destinatari activi", String((status.linkedRecipients || []).length)]
+  ];
+
+  automationStatusSummaryEl.innerHTML = cards
+    .map(
+      ([label, value]) => `
+        <article class="estimate-card">
+          <span>${label}</span>
+          <strong>${value}</strong>
+        </article>
+      `
+    )
+    .join("");
+
+  automationAudienceBodyEl.innerHTML = (status.resolvedAudience || [])
+    .map(
+      (item) => `
+        <tr>
+          <td>${item.name}</td>
+          <td>${item.roleCode || "-"}</td>
+          <td>${item.channel || "-"}</td>
+          <td>${item.canReceiveTelegram ? "Legat" : "Lipsa legare"}</td>
+          <td>${item.lastSeenAt ? new Date(item.lastSeenAt).toLocaleString("ro-RO") : "-"}</td>
         </tr>
       `
     )
@@ -1666,6 +1715,19 @@ async function loadLockouts() {
   renderLockouts(lockoutsCache);
 }
 
+async function loadAutomationStatus() {
+  if (!canAccess("setup") || !automationStatusSummaryEl) {
+    automationStatusCache = null;
+    renderAutomationStatus(null);
+    return;
+  }
+
+  const response = await fetch("/api/automation/close-of-day/status");
+  const data = await response.json();
+  automationStatusCache = data;
+  renderAutomationStatus(data);
+}
+
 async function loadOpeningDocuments() {
   if (!canAccess("opening")) {
     openingDocumentsCache = [];
@@ -1746,6 +1808,7 @@ async function loadDashboard() {
     loadComplaints(),
     loadAuditLogs(),
     loadLockouts(),
+    loadAutomationStatus(),
     loadDailyReport()
   ]);
 }
@@ -2856,11 +2919,35 @@ systemSettingsForm.addEventListener("submit", async (event) => {
       changedBy: "dashboard"
     });
     settingsMessageEl.textContent = "Setarile au fost actualizate.";
-    await Promise.all([loadConfig(), loadAuditLogs()]);
+    await Promise.all([loadConfig(), loadAuditLogs(), loadAutomationStatus()]);
   } catch (error) {
     settingsMessageEl.textContent = error.message;
   }
 });
+
+if (runCloseOfDayButtonEl) {
+  runCloseOfDayButtonEl.addEventListener("click", async () => {
+    automationMessageEl.textContent = "Se ruleaza...";
+
+    try {
+      const response = await fetch("/api/automation/close-of-day/run", {
+        method: "POST"
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Nu am putut rula automatizarea.");
+      }
+
+      automationMessageEl.textContent = payload.sent
+        ? `Raport trimis catre ${payload.recipients} destinatar(i).`
+        : `Automatizarea nu a trimis nimic: ${payload.reason}.`;
+      await Promise.all([loadAutomationStatus(), loadAuditLogs()]);
+    } catch (error) {
+      automationMessageEl.textContent = error.message;
+    }
+  });
+}
 
 loginFormEl.addEventListener("submit", async (event) => {
   event.preventDefault();

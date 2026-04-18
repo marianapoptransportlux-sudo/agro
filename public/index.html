@@ -1228,6 +1228,32 @@
             </div>
           </article>
 
+          <article class="panel" data-access="setup">
+            <div class="panel-head">
+              <h2>Automatizare inchidere zi</h2>
+              <p>Status operare, destinatari Telegram si test manual al raportarii automate.</p>
+            </div>
+            <div class="automation-status" id="automation-status-summary"></div>
+            <div class="editor-actions">
+              <button type="button" id="run-close-of-day-button">Ruleaza inchiderea de zi acum</button>
+              <p class="form-message" id="automation-message"></p>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Utilizator</th>
+                    <th>Rol</th>
+                    <th>Canal</th>
+                    <th>Telegram</th>
+                    <th>Ultima legare</th>
+                  </tr>
+                </thead>
+                <tbody id="automation-audience-body"></tbody>
+              </table>
+            </div>
+          </article>
+
           <article class="panel" data-access="security-admin">
             <div class="panel-head">
               <h2>Securitate acces</h2>

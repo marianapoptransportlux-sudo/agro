@@ -537,6 +537,13 @@ thead th {
   align-items: center;
 }
 
+.automation-status {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
 .user-form {
   margin-top: 20px;
   padding-top: 20px;
@@ -570,6 +577,10 @@ thead th {
   .estimate-panel {
     grid-template-columns: 1fr 1fr;
   }
+
+  .automation-status {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 920px) {
@@ -582,6 +593,10 @@ thead th {
   .form-actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .automation-status {
+    grid-template-columns: 1fr;
   }
 
   h1 {

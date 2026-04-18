@@ -3,6 +3,11 @@ require("dotenv").config();
 const express = require("express");
 const path = require("path");
 const { startBot } = require("./bot");
+const {
+  getCloseOfDayStatusHandler,
+  runCloseOfDayHandler
+} = require("./automation-handlers");
+const { startCloseOfDayScheduler } = require("./close-of-day");
 const { attachCurrentUser, requireAuth, requireRoles } = require("./auth");
 const { changePasswordHandler, loginHandler, logoutHandler, meHandler } = require("./auth-handlers");
 const {
@@ -161,6 +166,8 @@ app.get("/api/security/lockouts", requireRoles(["admin"]), listLockoutsHandler);
 app.post("/api/security/lockouts/:username/unlock", requireRoles(["admin"]), async (req, res) => {
   return unlockUsernameHandler(req, res, req.params.username);
 });
+app.get("/api/automation/close-of-day/status", requireRoles(["admin"]), getCloseOfDayStatusHandler);
+app.post("/api/automation/close-of-day/run", requireRoles(["admin"]), runCloseOfDayHandler);
 
 app.get("*", (_req, res) => {
   res.sendFile(path.join(process.cwd(), "public", "index.html"));
@@ -169,4 +176,5 @@ app.get("*", (_req, res) => {
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
   startBot(process.env.TELEGRAM_BOT_TOKEN);
+  startCloseOfDayScheduler();
 });
