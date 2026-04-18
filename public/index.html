@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="ro">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Soft Elevator - Etapa 1</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <section class="login-screen" id="login-screen">
+      <form class="login-card" id="login-form">
+        <p class="eyebrow">Acces securizat</p>
+        <h1 class="login-title">Intrare in sistem</h1>
+        <p class="hero-copy">
+          Accesul la datele elevatorului este permis doar utilizatorilor autentificati.
+        </p>
+        <label>
+          Utilizator
+          <input id="login-username" name="username" autocomplete="username" required />
+        </label>
+        <label>
+          Parola
+          <input
+            id="login-password"
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            required
+          />
+        </label>
+        <button type="submit">Autentificare</button>
+        <p class="form-message" id="login-message"></p>
+      </form>
+    </section>
+
+    <div class="page-shell" id="page-shell" hidden>
+      <header class="session-bar">
+        <div>
+          <p class="eyebrow">Sesiune activa</p>
+          <strong id="current-user-name">-</strong>
+          <span id="current-user-role">-</span>
+        </div>
+        <div class="session-actions">
+          <button class="ghost-button" id="change-password-button" type="button">
+            Schimba parola
+          </button>
+          <button class="ghost-button" id="logout-button" type="button">Iesire</button>
+        </div>
+      </header>
+
+      <section class="panel password-panel" id="password-panel" hidden>
+        <div class="panel-head">
+          <h2>Schimbare parola</h2>
+          <p>Actualizeaza parola contului curent fara interventia administratorului.</p>
+        </div>
+        <form class="mini-form" id="change-password-form">
+          <div class="split">
+            <label>
+              Parola curenta
+              <input name="currentPassword" type="password" autocomplete="current-password" required />
+            </label>
+            <label>
+              Parola noua
+              <input name="newPassword" type="password" autocomplete="new-password" required />
+            </label>
+          </div>
+          <label>
+            Confirma parola noua
+            <input name="confirmPassword" type="password" autocomplete="new-password" required />
+          </label>
+          <div class="session-actions">
+            <button type="submit">Salveaza parola</button>
+            <button class="ghost-button" id="cancel-password-button" type="button">Renunta</button>
+          </div>
+          <p class="form-message" id="change-password-message"></p>
+        </form>
+      </section>
+
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Soft elevator</p>
+          <h1>Fundatia Etapei 1: operare si configurare</h1>
+          <p class="hero-copy">
+            Dashboard-ul acopera receptia curenta si administreaza nomenclatoarele de baza:
+            parteneri, produse, locatii, roluri, utilizatori si tarife.
+          </p>
+        </div>
+        <div class="hero-card">
+          <p>Etapa activa</p>
+          <strong>Fundatie + configurare</strong>
+          <span>Pregateste fluxurile pentru receptie, stoc si procesare.</span>
+        </div>
+      </section>
+
+      <nav class="view-switch">
+        <button class="view-tab is-active" data-view="operations" type="button">Operare</button>
+        <button class="view-tab" data-view="setup" data-access="setup" type="button">Configurare etapa 1</button>
+      </nav>
+
+      <section class="view-section is-active" data-view-panel="operations">
+        <section class="stats" id="stats"></section>
+
+        <section class="panel filters-panel">
+          <div class="panel-head">
+            <h2>Filtre operare</h2>
+            <p>Filtrare rapida pentru receptii si procesari</p>
+          </div>
+          <div class="split">
+            <label>
+              Filtru receptii dupa status
+              <select id="receipt-status-filter">
+                <option value="">Toate</option>
+                <option value="Draft">Draft</option>
+                <option value="Confirmat">Confirmat</option>
+                <option value="Procesata">Procesata</option>
+                <option value="Inchis">Inchis</option>
+                <option value="Anulat">Anulat</option>
+                <option value="Redeschis">Redeschis</option>
+                <option value="Noua">Noua</option>
+                <option value="Verificata">Verificata</option>
+                <option value="Finalizata">Finalizata</option>
+              </select>
+            </label>
+            <label>
+              Filtru receptii dupa produs
+              <select id="receipt-product-filter">
+                <option value="">Toate produsele</option>
+              </select>
+            </label>
+          </div>
+          <div class="split">
+            <label>
+              Filtru procesari dupa tip
+              <select id="processing-type-filter">
+                <option value="">Toate procesarile</option>
+              </select>
+            </label>
+            <label>
+              Filtru procesari dupa receptie
+              <select id="processing-receipt-filter">
+                <option value="">Toate receptiile</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <section class="panel opening-panel" data-access="opening">
+          <div class="panel-head">
+            <h2>Document sold initial</h2>
+            <p>Introdu stocurile actuale si lista de datorii la pornirea sistemului</p>
+          </div>
+
+          <form class="mini-form" id="opening-document-form">
+            <div class="split">
+              <label>
+                Data document
+                <input type="date" name="documentDate" id="opening-document-date" required />
+              </label>
+              <label>
+                Observatii
+                <input name="note" placeholder="Comentariu sold initial" />
+              </label>
+            </div>
+
+            <div class="report-grid">
+              <section>
+                <h3>Adauga stoc initial</h3>
+                <div class="split">
+                  <label>
+                    Produs
+                    <select id="opening-stock-product"></select>
+                  </label>
+                  <label>
+                    Locatie
+                    <select id="opening-stock-location"></select>
+                  </label>
+                </div>
+                <div class="split">
+                  <label>
+                    Cantitate
+                    <input id="opening-stock-quantity" type="number" min="0" step="0.01" />
+                  </label>
+                  <div class="report-actions">
+                    <button type="button" id="add-opening-stock">Adauga stoc</button>
+                  </div>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Produs</th>
+                        <th>Locatie</th>
+                        <th>Cantitate</th>
+                      </tr>
+                    </thead>
+                    <tbody id="opening-stock-body"></tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section>
+                <h3>Adauga datorie initiala</h3>
+                <div class="split">
+                  <label>
+                    Partener
+                    <select id="opening-debt-partner"></select>
+                  </label>
+                  <label>
+                    Tip
+                    <select id="opening-debt-direction">
+                      <option value="payment">Plata catre furnizor</option>
+                      <option value="collection">Incasare de la client</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="split">
+                  <label>
+                    Suma
+                    <input id="opening-debt-amount" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>
+                    Observatii
+                    <input id="opening-debt-note" placeholder="Comentariu datorie" />
+                  </label>
+                </div>
+                <div class="report-actions">
+                  <button type="button" id="add-opening-debt">Adauga datorie</button>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Partener</th>
+                        <th>Tip</th>
+                        <th>Suma</th>
+                      </tr>
+                    </thead>
+                    <tbody id="opening-debt-body"></tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+
+            <button type="submit">Salveaza documentul de sold initial</button>
+            <p class="form-message" id="opening-document-message"></p>
+          </form>
+        </section>
+
+        <section class="grid">
+          <form class="panel form-panel" id="receipt-form" data-access="receipt-write">
+            <div class="panel-head">
+              <h2>Receptie noua</h2>
+              <p>Formular conectat la parteneri, produse si locatii configurate</p>
+            </div>
+
+            <label>
+              Furnizor
+              <select name="supplierId" id="supplier-select" required></select>
+            </label>
+
+            <label>
+              Produs
+              <select name="productId" id="product-select" required></select>
+            </label>
+
+            <div class="split">
+              <label>
+                Cantitate
+                <input name="quantity" type="number" min="0" step="0.01" required />
+              </label>
+              <label>
+                Unitate
+                <input name="unit" id="unit-input" readonly required />
+              </label>
+            </div>
+
+            <div class="split">
+              <label>
+                Pret / unitate
+                <input name="price" type="number" min="0" step="0.01" required />
+              </label>
+              <label>
+                Locatie initiala
+                <select name="locationId" id="location-select"></select>
+              </label>
+            </div>
+
+            <div class="split">
+              <label>
+                Umiditate %
+                <input name="humidity" id="humidity-input" type="number" min="0" step="0.01" required />
+              </label>
+              <label>
+                Impuritati %
+                <input name="impurity" id="impurity-input" type="number" min="0" step="0.01" required />
+              </label>
+            </div>
+
+            <div class="split">
+              <label>
+                Vehicul
+                <input name="vehicle" placeholder="Ex: CTC-204" />
+              </label>
+              <label>
+                Receptionat de
+                <select name="receivedBy" id="user-select"></select>
+              </label>
+            </div>
+
+            <label>
+              Observatii
+              <textarea name="note" rows="4" placeholder="Calitate, umiditate, remarci"></textarea>
+            </label>
+
+            <section class="estimate-panel" id="receipt-estimate">
+              <div class="estimate-card">
+                <span>Norma umiditate</span>
+                <strong id="estimate-humidity-norm">0%</strong>
+              </div>
+              <div class="estimate-card">
+                <span>Norma impuritati</span>
+                <strong id="estimate-impurity-norm">0%</strong>
+              </div>
+              <div class="estimate-card">
+                <span>Net provizoriu</span>
+                <strong id="estimate-net">0</strong>
+              </div>
+              <div class="estimate-card">
+                <span>Servicii estimate</span>
+                <strong id="estimate-services">0 MDL</strong>
+              </div>
+              <div class="estimate-card estimate-card-accent">
+                <span>Plata preliminara</span>
+                <strong id="estimate-payable">0 MDL</strong>
+              </div>
+            </section>
+
+            <button type="submit">Salveaza receptia</button>
+            <p class="form-message" id="form-message"></p>
+          </form>
+
+          <section class="panel table-panel">
+            <div class="panel-head">
+              <h2>Receptii recente</h2>
+              <p>Vizualizare operativa cu sursa si locatia de stoc</p>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Produs</th>
+                    <th>Furnizor</th>
+                    <th>Brut / net</th>
+                    <th>Locatie</th>
+                    <th>Plata prelim.</th>
+                    <th>Status</th>
+                    <th>Sursa</th>
+                  </tr>
+                </thead>
+                <tbody id="receipts-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="grid processing-grid">
+          <form class="panel form-panel" id="processing-form" data-access="processing-write">
+            <div class="panel-head">
+              <h2>Procesare lot</h2>
+              <p>Curatire, uscare, deseu confirmat si net final</p>
+            </div>
+
+            <label>
+              Receptie
+              <select name="receiptId" id="processing-receipt-select" required></select>
+            </label>
+
+            <div class="split">
+              <label>
+                Tip procesare
+                <select name="processingType" id="processing-type-select" required></select>
+              </label>
+              <label>
+                Operator
+                <select name="operator" id="processing-user-select"></select>
+              </label>
+            </div>
+
+            <label>
+              Status procesare
+              <select name="status">
+                <option value="Confirmat">Confirmat</option>
+                <option value="Inchis">Inchis</option>
+                <option value="Anulat">Anulat</option>
+                <option value="Redeschis">Redeschis</option>
+              </select>
+            </label>
+
+            <div class="split">
+              <label>
+                Cantitate procesata
+                <input name="processedQuantity" id="processed-quantity-input" type="number" min="0" step="0.01" required />
+              </label>
+              <label>
+                Deseu confirmat
+                <input name="confirmedWaste" id="confirmed-waste-input" type="number" min="0" step="0.01" value="0" />
+              </label>
+            </div>
+
+            <div class="split">
+              <label>
+                Umiditate finala
+                <input name="finalHumidity" type="number" min="0" step="0.01" />
+              </label>
+              <label>
+                Observatii
+                <input name="note" placeholder="Comentariu procesare" />
+              </label>
+            </div>
+
+            <section class="estimate-panel">
+              <div class="estimate-card">
+                <span>Sursa</span>
+                <strong id="processing-source">-</strong>
+              </div>
+              <div class="estimate-card">
+                <span>Net provizoriu receptie</span>
+                <strong id="processing-provisional-net">0</strong>
+              </div>
+              <div class="estimate-card estimate-card-accent">
+                <span>Net final estimat</span>
+                <strong id="processing-final-net">0</strong>
+              </div>
+            </section>
+
+            <button type="submit">Salveaza procesarea</button>
+            <p class="form-message" id="processing-message"></p>
+          </form>
+
+          <section class="panel table-panel">
+            <div class="panel-head">
+              <h2>Procesari recente</h2>
+              <p>Jurnal operator pentru loturile deja receptionate</p>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Produs</th>
+                    <th>Receptie</th>
+                    <th>Tip</th>
+                    <th>Procesat</th>
+                    <th>Deseu</th>
+                    <th>Net final</th>
+                  </tr>
+                </thead>
+                <tbody id="processings-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="panel stock-panel">
+          <div class="panel-head">
+            <h2>Stoc pe locatii</h2>
+            <p>Vedere curenta pe locatie si produs, pe baza netului disponibil</p>
+          </div>
+          <div class="stock-summary" id="stock-summary"></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Locatie</th>
+                  <th>Produs</th>
+                  <th>Cantitate</th>
+                  <th>Unitate</th>
+                </tr>
+              </thead>
+              <tbody id="stocks-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="grid finance-grid" data-access="finance">
+          <form class="panel form-panel" id="transaction-form">
+            <div class="panel-head">
+              <h2>Plata / incasare</h2>
+              <p>Jurnal financiar simplu pe receptie si partener</p>
+            </div>
+
+            <label>
+              Tip referinta
+              <select name="referenceType" id="transaction-reference-type-select">
+                <option value="receipt">Plata furnizor / receptie</option>
+                <option value="delivery">Incasare client / livrare</option>
+                <option value="opening-debt">Sold initial / datorie</option>
+              </select>
+            </label>
+
+            <label>
+              Referinta
+              <select name="referenceId" id="transaction-reference-select" required></select>
+            </label>
+
+            <div class="split">
+              <label>
+                Tip operatie
+                <select name="direction" id="transaction-direction-select">
+                  <option value="payment">Plata</option>
+                  <option value="collection">Incasare</option>
+                </select>
+              </label>
+              <label>
+                Tip plata
+                <select name="paymentType" id="transaction-payment-type-select"></select>
+              </label>
+            </div>
+
+            <label>
+              Status tranzactie
+              <select name="status">
+                <option value="Confirmat">Confirmat</option>
+                <option value="Inchis">Inchis</option>
+                <option value="Anulat">Anulat</option>
+                <option value="Redeschis">Redeschis</option>
+              </select>
+            </label>
+
+            <div class="split">
+              <label>
+                Suma
+                <input name="amount" type="number" min="0" step="0.01" required />
+              </label>
+              <label>
+                Observatii
+                <input name="note" placeholder="Comentariu financiar" />
+              </label>
+            </div>
+
+            <section class="estimate-panel">
+              <div class="estimate-card">
+                <span>Partener</span>
+                <strong id="transaction-partner">-</strong>
+              </div>
+              <div class="estimate-card">
+                <span>Tinta plata</span>
+                <strong id="transaction-target">0 MDL</strong>
+              </div>
+              <div class="estimate-card estimate-card-accent">
+                <span>Stare</span>
+                <strong id="transaction-status">Neachitat</strong>
+              </div>
+            </section>
+
+            <button type="submit">Salveaza tranzactia</button>
+            <p class="form-message" id="transaction-message"></p>
+          </form>
+
+          <section class="panel table-panel">
+            <div class="panel-head">
+              <h2>Tranzactii recente</h2>
+              <p>Plati si incasari inregistrate in sistem</p>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Referinta</th>
+                      <th>Partener</th>
+                      <th>Tip</th>
+                      <th>Plata</th>
+                    <th>Suma</th>
+                  </tr>
+                </thead>
+                <tbody id="transactions-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="grid delivery-grid">
+          <form class="panel form-panel" id="delivery-form" data-access="delivery-write">
+              <div class="panel-head">
+                <h2>Livrare / iesire din stoc</h2>
+                <p>Scadere din stoc la cantitatea reala incarcata</p>
+              </div>
+
+            <label>
+              Status livrare
+              <select name="status">
+                <option value="Confirmat">Confirmat</option>
+                <option value="Inchis">Inchis</option>
+                <option value="Anulat">Anulat</option>
+                <option value="Redeschis">Redeschis</option>
+              </select>
+            </label>
+
+            <label>
+              Receptie sursa
+              <select name="receiptId" id="delivery-receipt-select" required></select>
+            </label>
+
+            <label>
+              Cumparator
+              <select name="customerId" id="delivery-customer-select" required></select>
+            </label>
+
+            <div class="split">
+              <label>
+                Cantitate livrata
+                <input name="deliveredQuantity" id="delivery-quantity-input" type="number" min="0" step="0.01" required />
+              </label>
+              <label>
+                Vehicul
+                <input name="vehicle" placeholder="Ex: AG-102" />
+              </label>
+            </div>
+
+            <div class="split">
+              <label>
+                Nr. contract
+                <input name="contractNumber" placeholder="Contract" />
+              </label>
+              <label>
+                Data contract
+                <input name="contractDate" type="date" />
+              </label>
+            </div>
+
+            <div class="split">
+              <label>
+                Pret contract
+                <input name="contractPrice" type="number" min="0" step="0.01" />
+              </label>
+              <label>
+                Invoice / factura
+                <input name="invoiceNumber" placeholder="Invoice / Factura" />
+              </label>
+            </div>
+
+            <label>
+              Observatii
+              <input name="note" placeholder="Comentariu livrare" />
+            </label>
+
+            <section class="estimate-panel">
+              <div class="estimate-card">
+                <span>Locatie</span>
+                <strong id="delivery-location">-</strong>
+              </div>
+              <div class="estimate-card">
+                <span>Disponibil</span>
+                <strong id="delivery-available">0</strong>
+              </div>
+              <div class="estimate-card estimate-card-accent">
+                <span>Status livrare</span>
+                <strong id="delivery-status">Nelivrat</strong>
+              </div>
+            </section>
+
+            <button type="submit">Salveaza livrarea</button>
+            <p class="form-message" id="delivery-message"></p>
+          </form>
+
+          <section class="panel table-panel">
+            <div class="panel-head">
+              <h2>Livrari recente</h2>
+              <p>Iesiri reale din stoc si legatura cu contractul</p>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Receptie</th>
+                    <th>Cumparator</th>
+                    <th>Produs</th>
+                    <th>Cantitate</th>
+                    <th>Invoice</th>
+                  </tr>
+                </thead>
+                <tbody id="deliveries-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="grid complaint-grid">
+          <form class="panel form-panel" id="complaint-form" data-access="complaint-write">
+            <div class="panel-head">
+              <h2>Reclamatie / neajuns</h2>
+              <p>Proces separat, fara a intoarce marfa in stoc</p>
+            </div>
+
+            <label>
+              Livrare
+              <select name="deliveryId" id="complaint-delivery-select" required></select>
+            </label>
+
+            <div class="split">
+              <label>
+                Tip reclamatie
+                <select name="complaintType">
+                  <option value="Lipsa cantitativa">Lipsa cantitativa</option>
+                  <option value="Problema calitate">Problema calitate</option>
+                  <option value="Alta retinere">Alta retinere</option>
+                </select>
+              </label>
+              <label>
+                Cantitate contestata
+                <input name="contestedQuantity" type="number" min="0" step="0.01" required />
+              </label>
+            </div>
+
+            <div class="split">
+              <label>
+                Status
+                <select name="status">
+                  <option value="Deschisa">Deschisa</option>
+                  <option value="Acceptata">Acceptata</option>
+                  <option value="Respinsa">Respinsa</option>
+                  <option value="Inchisa">Inchisa</option>
+                  <option value="Redeschisa">Redeschisa</option>
+                </select>
+              </label>
+              <label>
+                Solutie
+                <select name="resolutionType">
+                  <option value="">Fara solutie</option>
+                  <option value="Scadere ultima factura">Scadere ultima factura</option>
+                  <option value="Factura corectata">Factura corectata</option>
+                  <option value="Invoice cu minus">Invoice cu minus</option>
+                </select>
+              </label>
+            </div>
+
+            <label>
+              Observatii
+              <input name="note" placeholder="Comentariu reclamatie" />
+            </label>
+
+            <button type="submit">Salveaza reclamatia</button>
+            <p class="form-message" id="complaint-message"></p>
+          </form>
+
+          <section class="panel table-panel">
+            <div class="panel-head">
+              <h2>Reclamatii recente</h2>
+              <p>Controlul lipsurilor si neajunsurilor la livrare</p>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Livrare</th>
+                    <th>Client</th>
+                    <th>Tip</th>
+                    <th>Cantitate</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="complaints-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="panel open-journal-panel">
+          <div class="panel-head">
+            <h2>Jurnal pozitii deschise</h2>
+            <p>Control rapid pentru datorii la furnizori si incasari de la clienti</p>
+          </div>
+
+          <div class="split">
+            <label>
+              Filtru plati furnizori
+              <select id="open-receipt-status-filter">
+                <option value="">Toate</option>
+                <option value="Neachitat">Neachitat</option>
+                <option value="Partial">Partial</option>
+                <option value="Achitat">Achitat</option>
+              </select>
+            </label>
+            <label>
+              Filtru incasari clienti
+              <select id="open-delivery-status-filter">
+                <option value="">Toate</option>
+                <option value="Neincasat">Neincasat</option>
+                <option value="Partial incasat">Partial incasat</option>
+                <option value="Incasat">Incasat</option>
+              </select>
+            </label>
+          </div>
+
+          <label>
+            Cauta dupa partener
+            <input id="open-partner-filter" placeholder="Nume furnizor sau client" />
+          </label>
+
+          <div class="report-grid">
+            <section>
+              <h3>Receptii pentru plata</h3>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Receptie</th>
+                      <th>Furnizor</th>
+                      <th>Tinta</th>
+                      <th>Achitat</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="open-receipts-body"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section>
+              <h3>Livrari pentru incasare</h3>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Livrare</th>
+                      <th>Client</th>
+                      <th>Tinta</th>
+                      <th>Incasat</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="open-deliveries-body"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="panel audit-panel" data-access="audit">
+          <div class="panel-head">
+            <h2>Raport control modificari</h2>
+            <p>Istoric pentru modificari, redeschideri si schimbari de status</p>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Entitate</th>
+                  <th>Actiune</th>
+                  <th>Utilizator</th>
+                  <th>Mentiune</th>
+                  <th>Data</th>
+                </tr>
+              </thead>
+              <tbody id="audit-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel reports-panel" data-access="reports">
+          <div class="panel-head">
+            <h2>Raport zilnic operational</h2>
+            <p>Sumar rapid pentru receptii, procesare, finante si stoc</p>
+          </div>
+
+          <form class="mini-form report-filter-form" id="daily-report-form">
+            <div class="split">
+              <label>
+                Data raport
+                <input type="date" id="daily-report-date" name="date" required />
+              </label>
+              <div class="report-actions">
+                <button type="submit">Actualizeaza raportul</button>
+              </div>
+            </div>
+          </form>
+
+          <div class="stock-summary" id="daily-report-summary"></div>
+
+          <div class="report-grid">
+            <section>
+              <h3>Receptii pe zi</h3>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Furnizor</th>
+                      <th>Produs</th>
+                      <th>Brut</th>
+                      <th>Net prov.</th>
+                    </tr>
+                  </thead>
+                  <tbody id="daily-report-receipts"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section>
+              <h3>Procesari pe zi</h3>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Receptie</th>
+                      <th>Tip</th>
+                      <th>Procesat</th>
+                      <th>Deseu</th>
+                    </tr>
+                  </thead>
+                  <tbody id="daily-report-processings"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section>
+              <h3>Livrari pe zi</h3>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Client</th>
+                      <th>Produs</th>
+                      <th>Cantitate</th>
+                      <th>Invoice</th>
+                    </tr>
+                  </thead>
+                  <tbody id="daily-report-deliveries"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section>
+              <h3>Plati si incasari pe zi</h3>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Partener</th>
+                      <th>Tip</th>
+                      <th>Plata</th>
+                      <th>Suma</th>
+                    </tr>
+                  </thead>
+                  <tbody id="daily-report-transactions"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section>
+              <h3>Reclamatii pe zi</h3>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Livrare</th>
+                      <th>Tip</th>
+                      <th>Cantitate</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="daily-report-complaints"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+      </section>
+
+      <section class="view-section" data-view-panel="setup" data-access="setup">
+        <section class="stats config-stats" id="config-summary"></section>
+
+        <section class="setup-grid">
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Parteneri</h2>
+              <p>Furnizori, cumparatori si statut fiscal</p>
+            </div>
+            <form class="mini-form" data-entity-form="partners">
+              <input name="name" placeholder="Denumire partener" required />
+              <input name="idno" placeholder="IDNO" />
+              <input name="phone" placeholder="Telefon" />
+              <input name="address" placeholder="Adresa" />
+              <div class="split">
+                <select name="role">
+                  <option value="furnizor">Furnizor</option>
+                  <option value="cumparator">Cumparator</option>
+                  <option value="ambele">Ambele</option>
+                </select>
+                <select name="fiscalProfile" id="fiscal-profile-options"></select>
+              </div>
+              <button type="submit">Adauga partener</button>
+            </form>
+            <div class="list-block" id="partners-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Produse</h2>
+              <p>Norme de umiditate si impuritati</p>
+            </div>
+            <form class="mini-form" data-entity-form="products">
+              <div class="split">
+                <input name="name" placeholder="Denumire produs" required />
+                <input name="code" placeholder="Cod intern" required />
+              </div>
+              <div class="split">
+                <input name="unit" placeholder="Unitate" value="tone" required />
+                <input name="humidityNorm" type="number" step="0.01" placeholder="Norma umiditate" required />
+              </div>
+              <div class="split">
+                <input name="impurityNorm" type="number" step="0.01" placeholder="Norma impuritati" required />
+                <select name="active">
+                  <option value="true">Activ</option>
+                  <option value="false">Inactiv</option>
+                </select>
+              </div>
+              <button type="submit">Adauga produs</button>
+            </form>
+            <div class="list-block" id="products-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Locatii de stoc</h2>
+              <p>Groapa, tampon, cilindri, depozit separat</p>
+            </div>
+            <form class="mini-form" data-entity-form="storageLocations">
+              <input name="name" placeholder="Denumire locatie" required />
+              <div class="split">
+                <select name="type">
+                  <option value="groapa">Groapa</option>
+                  <option value="tampon">Tampon</option>
+                  <option value="cilindru">Cilindru</option>
+                  <option value="depozit">Depozit</option>
+                </select>
+                <input name="capacity" type="number" step="0.01" placeholder="Capacitate" required />
+              </div>
+              <div class="split">
+                <select name="costCategory">
+                  <option value="neprocesat">Neprocesat</option>
+                  <option value="procesat">Procesat</option>
+                </select>
+                <select name="active">
+                  <option value="true">Activ</option>
+                  <option value="false">Inactiv</option>
+                </select>
+              </div>
+              <button type="submit">Adauga locatie</button>
+            </form>
+            <div class="list-block" id="storageLocations-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Tarife</h2>
+              <p>Curatire, uscare si reguli comerciale de baza</p>
+            </div>
+            <form class="mini-form" data-entity-form="tariffs">
+              <div class="split">
+                <input name="service" placeholder="Serviciu" required />
+                <input name="product" placeholder="Produs / General" value="General" />
+              </div>
+              <div class="split">
+                <input name="partner" placeholder="Partener / General" value="General" />
+                <input name="fiscalProfile" placeholder="Statut fiscal / General" value="General" />
+              </div>
+              <div class="split">
+                <input name="calculation" placeholder="Mod calcul" required />
+                <input name="value" type="number" step="0.01" placeholder="Valoare" required />
+              </div>
+              <div class="split">
+                <input name="validFrom" type="date" required />
+                <select name="active">
+                  <option value="true">Activ</option>
+                  <option value="false">Inactiv</option>
+                </select>
+              </div>
+              <button type="submit">Adauga tarif</button>
+            </form>
+            <div class="list-block" id="tariffs-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Roluri si utilizatori</h2>
+              <p>Rolurile MVP si utilizatorii operationali</p>
+            </div>
+            <form class="mini-form" data-entity-form="roles">
+              <div class="split">
+                <input name="name" placeholder="Nume rol" required />
+                <input name="code" placeholder="Cod rol" required />
+              </div>
+              <input name="permissions" placeholder="Permisiuni principale" />
+              <button type="submit">Adauga rol</button>
+            </form>
+            <div class="list-block compact-list" id="roles-list"></div>
+
+            <form class="mini-form user-form" data-entity-form="users">
+              <div class="split">
+                <input name="name" placeholder="Nume utilizator" required />
+                <input name="username" placeholder="Username" required />
+              </div>
+              <div class="split">
+                <select name="roleCode" id="role-options"></select>
+                <input name="password" type="password" placeholder="Parola initiala" />
+              </div>
+              <div class="split">
+                <select name="channel">
+                  <option value="web">web</option>
+                  <option value="web+telegram">web+telegram</option>
+                  <option value="telegram">telegram</option>
+                </select>
+                <select name="active">
+                  <option value="true">Activ</option>
+                  <option value="false">Inactiv</option>
+                </select>
+              </div>
+              <button type="submit">Adauga utilizator</button>
+            </form>
+            <div class="list-block compact-list" id="users-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Setari sistem</h2>
+              <p>Canal de raportare si inchidere de zi</p>
+            </div>
+            <form class="mini-form" id="system-settings-form">
+              <div class="split">
+                <input name="closeOfDayHour" type="number" min="0" max="23" placeholder="Ora inchidere zi" required />
+                <select name="reportChannel">
+                  <option value="telegram">telegram</option>
+                  <option value="email">email</option>
+                </select>
+              </div>
+              <input name="reportAudience" placeholder="Destinatari raport" required />
+              <input name="defaultCurrency" placeholder="Moneda" required />
+              <button type="submit">Salveaza setari</button>
+              <p class="form-message" id="settings-message"></p>
+            </form>
+
+            <div class="setup-columns">
+              <div>
+                <form class="mini-form compact-form" data-entity-form="paymentTypes">
+                  <input name="name" placeholder="Tip plata nou" required />
+                  <select name="active">
+                    <option value="true">Activ</option>
+                    <option value="false">Inactiv</option>
+                  </select>
+                  <button type="submit">Adauga tip plata</button>
+                </form>
+                <div class="list-block compact-list" id="paymentTypes-list"></div>
+              </div>
+
+              <div>
+                <form class="mini-form compact-form" data-entity-form="fiscalProfiles">
+                  <input name="name" placeholder="Statut fiscal" required />
+                  <div class="split">
+                    <input
+                      name="withholdingPercent"
+                      type="number"
+                      step="0.01"
+                      placeholder="Retinere %"
+                    />
+                    <select name="vat">
+                      <option value="false">Fara TVA</option>
+                      <option value="true">Cu TVA</option>
+                    </select>
+                  </div>
+                  <select name="active">
+                    <option value="true">Activ</option>
+                    <option value="false">Inactiv</option>
+                  </select>
+                  <button type="submit">Adauga statut fiscal</button>
+                </form>
+                <div class="list-block compact-list" id="fiscalProfiles-list"></div>
+              </div>
+
+              <div>
+                <form class="mini-form compact-form" data-entity-form="processingTypes">
+                  <input name="name" placeholder="Tip procesare" required />
+                  <div class="split">
+                    <input
+                      name="consumptionNorm"
+                      type="number"
+                      step="0.01"
+                      placeholder="Norma consum"
+                    />
+                    <input name="resource" placeholder="Resursa" required />
+                  </div>
+                  <select name="active">
+                    <option value="true">Activ</option>
+                    <option value="false">Inactiv</option>
+                  </select>
+                  <button type="submit">Adauga procesare</button>
+                </form>
+                <div class="list-block compact-list" id="processingTypes-list"></div>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel" data-access="security-admin">
+            <div class="panel-head">
+              <h2>Securitate acces</h2>
+              <p>Lista utilizatorilor blocati temporar si deblocare manuala de catre administrator.</p>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Utilizator</th>
+                    <th>Blocat pana</th>
+                    <th>Ramas</th>
+                    <th>Actiune</th>
+                  </tr>
+                </thead>
+                <tbody id="lockouts-body"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <section class="panel editor-panel" id="editor-panel">
+          <div class="panel-head">
+            <h2 id="editor-title">Editor configurare</h2>
+            <p id="editor-copy">
+              Selecteaza un element din listele de mai sus pentru editare controlata in pagina.
+            </p>
+          </div>
+
+          <form class="mini-form" id="editor-form">
+            <div class="editor-empty" id="editor-empty">
+              Nu este selectat niciun element pentru editare.
+            </div>
+            <div class="editor-fields" id="editor-fields"></div>
+            <div class="editor-actions">
+              <button type="submit" id="editor-save" disabled>Salveaza modificarea</button>
+              <button type="button" class="ghost-button" id="editor-cancel" disabled>
+                Renunta
+              </button>
+            </div>
+            <p class="form-message" id="editor-message"></p>
+          </form>
+        </section>
+      </section>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
