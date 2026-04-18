@@ -14,9 +14,18 @@ const {
   getManagementSnapshot,
   getManagementStatus
 } = require("./management-report");
-const { getCriticalAlertState, updateCriticalAlertState } = require("./automation-state");
+const {
+  createDefaultCriticalAlertEscalation,
+  getCriticalAlertState,
+  listCriticalAlertStates,
+  resetCriticalAlertActions,
+  updateCriticalAlertState
+} = require("./automation-state");
 
 const CRITICAL_ALERT_COOLDOWN_MS = 30 * 60 * 1000;
+const CRITICAL_ALERT_ESCALATION_MS = 15 * 60 * 1000;
+
+let escalationMonitorInterval = null;
 
 function todayDateValue() {
   return new Date().toISOString().slice(0, 10);
@@ -64,6 +73,14 @@ function shouldSendCriticalAlert(previousState, nextStatus, fingerprint) {
   }
 
   return Date.now() - lastAlertAtMs >= CRITICAL_ALERT_COOLDOWN_MS;
+}
+
+function hasCriticalAlertResponse(alertState) {
+  return Boolean(
+    Object.keys(alertState.actions?.viewedBy || {}).length ||
+      Object.keys(alertState.actions?.inProgressBy || {}).length ||
+      Object.keys(alertState.actions?.resolvedBy || {}).length
+  );
 }
 
 async function loadManagementSnapshot(dateValue) {
@@ -133,7 +150,15 @@ async function maybeSendCriticalManagementAlert(options = {}) {
     updateCriticalAlertState(dateValue, {
       ...nextStatePayload,
       lastAlertAt: new Date().toISOString(),
-      recipients: sentCount
+      recipients: sentCount,
+      actions:
+        previousState.lastFingerprint !== fingerprint || previousState.lastStatus !== "CRITIC"
+          ? resetCriticalAlertActions()
+          : previousState.actions,
+      escalation:
+        previousState.lastFingerprint !== fingerprint || previousState.lastStatus !== "CRITIC"
+          ? createDefaultCriticalAlertEscalation()
+          : previousState.escalation
     });
 
     await appendAuditLog({
@@ -169,6 +194,87 @@ async function maybeSendCriticalManagementAlert(options = {}) {
   };
 }
 
+function buildEscalationMessages(alertState) {
+  return [
+    `ESCALADARE alerta critica ${alertState.date}`,
+    `Nimeni nu a marcat alerta ca vazuta, in lucru sau rezolvata in ${Math.round(CRITICAL_ALERT_ESCALATION_MS / 60000)} minute.`,
+    `Ultima alerta: ${String(alertState.lastAlertAt || "").replace("T", " ").slice(0, 16)} | motiv: ${alertState.lastReason || "-"}`,
+    { criticalAlertDate: alertState.date }
+  ];
+}
+
+async function maybeEscalateCriticalAlerts() {
+  const config = await getConfig();
+  const settings = config.systemSettings || {};
+  const reportChannel = String(settings.reportChannel || "").trim().toLowerCase();
+  const audience = parseAudience(settings.reportAudience);
+
+  if (reportChannel !== "telegram" || !audience.length || !isBotReady()) {
+    return { checked: false, escalated: 0, reason: "not-ready" };
+  }
+
+  let escalated = 0;
+  for (const alertState of listCriticalAlertStates()) {
+    if (alertState.lastStatus !== "CRITIC" || !alertState.lastAlertAt || hasCriticalAlertResponse(alertState)) {
+      continue;
+    }
+
+    const lastAlertAtMs = Date.parse(alertState.lastAlertAt);
+    if (!Number.isFinite(lastAlertAtMs) || Date.now() - lastAlertAtMs < CRITICAL_ALERT_ESCALATION_MS) {
+      continue;
+    }
+
+    if (alertState.escalation?.escalatedAt) {
+      continue;
+    }
+
+    const sentCount = await sendTelegramMessagesToAudience(audience, buildEscalationMessages(alertState));
+    if (sentCount <= 0) {
+      continue;
+    }
+
+    updateCriticalAlertState(alertState.date, {
+      escalation: {
+        escalatedAt: new Date().toISOString(),
+        escalationCount: Number(alertState.escalation?.escalationCount || 0) + 1,
+        lastEscalationReason: "Fara raspuns la alerta critica",
+        lastEscalationTrigger: "no-response"
+      }
+    });
+
+    await appendAuditLog({
+      entityType: "automation",
+      entityId: 1,
+      action: "critical-alert-escalated",
+      reason: "Escaladare alerta critica fara raspuns",
+      user: "sistem",
+      newValue: {
+        date: alertState.date,
+        recipients: sentCount
+      }
+    });
+
+    escalated += 1;
+  }
+
+  return { checked: true, escalated, reason: escalated ? "escalated" : "no-pending-alerts" };
+}
+
+function startCriticalAlertMonitor() {
+  if (escalationMonitorInterval) {
+    return escalationMonitorInterval;
+  }
+
+  void maybeEscalateCriticalAlerts();
+  escalationMonitorInterval = setInterval(() => {
+    void maybeEscalateCriticalAlerts().catch((error) => {
+      console.error("Critical alert escalation monitor failed:", error.message);
+    });
+  }, 60 * 1000);
+
+  return escalationMonitorInterval;
+}
+
 function triggerCriticalManagementAlert(options = {}) {
   void maybeSendCriticalManagementAlert(options).catch((error) => {
     console.error("Critical management alert failed:", error.message);
@@ -177,5 +283,7 @@ function triggerCriticalManagementAlert(options = {}) {
 
 module.exports = {
   maybeSendCriticalManagementAlert,
+  maybeEscalateCriticalAlerts,
+  startCriticalAlertMonitor,
   triggerCriticalManagementAlert
 };

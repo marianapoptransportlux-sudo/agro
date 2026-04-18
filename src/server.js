@@ -8,6 +8,7 @@ const {
   runCloseOfDayHandler
 } = require("./automation-handlers");
 const { startCloseOfDayScheduler } = require("./close-of-day");
+const { startCriticalAlertMonitor } = require("./critical-alerts");
 const { attachCurrentUser, requireAuth, requireRoles } = require("./auth");
 const { changePasswordHandler, loginHandler, logoutHandler, meHandler } = require("./auth-handlers");
 const {
@@ -177,4 +178,5 @@ app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
   startBot(process.env.TELEGRAM_BOT_TOKEN);
   startCloseOfDayScheduler();
+  startCriticalAlertMonitor();
 });

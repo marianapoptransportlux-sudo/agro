@@ -446,7 +446,7 @@ function buildCriticalAlertMessages(snapshot, context = {}) {
     reasons.length ? `Cauze: ${reasons.join(" | ")}` : "Cauze: situatie critica detectata in indicatorii manageriali.",
     buildPriorityActionsMessage(snapshot),
     buildFinancialExposureMessage(snapshot),
-    { reportActionDate: snapshot.report.date }
+    { criticalAlertDate: snapshot.report.date }
   ];
 }
 

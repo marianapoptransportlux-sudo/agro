@@ -209,6 +209,15 @@ function getLastCloseOfDaySentDate() {
   return readAutomationState().reports.closeOfDay.lastSentDate || "";
 }
 
+function createDefaultCriticalAlertEscalation() {
+  return {
+    escalatedAt: "",
+    escalationCount: 0,
+    lastEscalationReason: "",
+    lastEscalationTrigger: ""
+  };
+}
+
 function getCriticalAlertState(dateValue) {
   const normalizedDate = String(dateValue || "").trim();
   if (!normalizedDate) {
@@ -220,7 +229,14 @@ function getCriticalAlertState(dateValue) {
       lastEvaluatedAt: "",
       lastTrigger: "",
       lastReason: "",
-      recipients: 0
+      recipients: 0,
+      actions: {
+        viewedBy: {},
+        inProgressBy: {},
+        resolvedBy: {},
+        lastAction: null
+      },
+      escalation: createDefaultCriticalAlertEscalation()
     };
   }
 
@@ -234,7 +250,17 @@ function getCriticalAlertState(dateValue) {
     lastEvaluatedAt: String(current.lastEvaluatedAt || ""),
     lastTrigger: String(current.lastTrigger || ""),
     lastReason: String(current.lastReason || ""),
-    recipients: Number(current.recipients || 0)
+    recipients: Number(current.recipients || 0),
+    actions: {
+      viewedBy: { ...(current.actions?.viewedBy || {}) },
+      inProgressBy: { ...(current.actions?.inProgressBy || {}) },
+      resolvedBy: { ...(current.actions?.resolvedBy || {}) },
+      lastAction: current.actions?.lastAction || null
+    },
+    escalation: {
+      ...createDefaultCriticalAlertEscalation(),
+      ...(current.escalation || {})
+    }
   };
 }
 
@@ -246,13 +272,116 @@ function updateCriticalAlertState(dateValue, payload = {}) {
 
   const state = readAutomationState();
   const current = state.reports.criticalAlerts.byDate?.[normalizedDate] || {};
+  const nextActions = payload.actions
+    ? {
+        ...resetCriticalAlertActions(),
+        ...(current.actions || {}),
+        ...(payload.actions || {}),
+        viewedBy: {
+          ...(current.actions?.viewedBy || {}),
+          ...(payload.actions?.viewedBy || {})
+        },
+        inProgressBy: {
+          ...(current.actions?.inProgressBy || {}),
+          ...(payload.actions?.inProgressBy || {})
+        },
+        resolvedBy: {
+          ...(current.actions?.resolvedBy || {}),
+          ...(payload.actions?.resolvedBy || {})
+        }
+      }
+    : current.actions;
+  const nextEscalation = payload.escalation
+    ? {
+        ...createDefaultCriticalAlertEscalation(),
+        ...(current.escalation || {}),
+        ...(payload.escalation || {})
+      }
+    : current.escalation;
+
   state.reports.criticalAlerts.byDate[normalizedDate] = {
     ...current,
     ...payload,
     date: normalizedDate
   };
+  if (nextActions) {
+    state.reports.criticalAlerts.byDate[normalizedDate].actions = nextActions;
+  }
+  if (nextEscalation) {
+    state.reports.criticalAlerts.byDate[normalizedDate].escalation = nextEscalation;
+  }
   writeAutomationState(state);
   return getCriticalAlertState(normalizedDate);
+}
+
+function resetCriticalAlertActions() {
+  return {
+    viewedBy: {},
+    inProgressBy: {},
+    resolvedBy: {},
+    lastAction: null
+  };
+}
+
+function recordCriticalAlertAction(dateValue, username, actionType) {
+  const normalizedDate = String(dateValue || "").trim();
+  const normalizedUsername = String(username || "").trim().toLowerCase();
+  const normalizedActionType = String(actionType || "").trim().toLowerCase();
+
+  if (!normalizedDate || !normalizedUsername || !normalizedActionType) {
+    return getCriticalAlertState(normalizedDate);
+  }
+
+  const state = readAutomationState();
+  const current = state.reports.criticalAlerts.byDate?.[normalizedDate] || {};
+  const actions = {
+    ...resetCriticalAlertActions(),
+    ...(current.actions || {}),
+    viewedBy: { ...(current.actions?.viewedBy || {}) },
+    inProgressBy: { ...(current.actions?.inProgressBy || {}) },
+    resolvedBy: { ...(current.actions?.resolvedBy || {}) }
+  };
+  const timestamp = new Date().toISOString();
+
+  if (normalizedActionType === "view") {
+    actions.viewedBy[normalizedUsername] = timestamp;
+  }
+
+  if (normalizedActionType === "work") {
+    actions.inProgressBy[normalizedUsername] = timestamp;
+    actions.viewedBy[normalizedUsername] = actions.viewedBy[normalizedUsername] || timestamp;
+  }
+
+  if (normalizedActionType === "resolve") {
+    actions.resolvedBy[normalizedUsername] = timestamp;
+    actions.inProgressBy[normalizedUsername] = actions.inProgressBy[normalizedUsername] || timestamp;
+    actions.viewedBy[normalizedUsername] = actions.viewedBy[normalizedUsername] || timestamp;
+  }
+
+  actions.lastAction = {
+    type: normalizedActionType,
+    username: normalizedUsername,
+    at: timestamp
+  };
+
+  state.reports.criticalAlerts.byDate[normalizedDate] = {
+    ...current,
+    date: normalizedDate,
+    actions,
+    escalation: {
+      ...createDefaultCriticalAlertEscalation(),
+      ...(current.escalation || {})
+    }
+  };
+  writeAutomationState(state);
+  return getCriticalAlertState(normalizedDate);
+}
+
+function listCriticalAlertStates() {
+  const state = readAutomationState();
+  return Object.keys(state.reports.criticalAlerts.byDate || {})
+    .sort()
+    .map((dateValue) => getCriticalAlertState(dateValue));
 }
 
 function markCloseOfDaySent(dateValue) {
@@ -268,6 +397,7 @@ function markCloseOfDaySent(dateValue) {
 }
 
 module.exports = {
+  createDefaultCriticalAlertEscalation,
   getCloseOfDayReportActionState,
   getCriticalAlertState,
   getLastCloseOfDaySentDate,
@@ -275,8 +405,11 @@ module.exports = {
   getTelegramLink,
   getTelegramLinksForUsernames,
   linkTelegramUser,
+  listCriticalAlertStates,
   markCloseOfDaySent,
   recordCloseOfDayReportAction,
+  recordCriticalAlertAction,
   readAutomationState,
+  resetCriticalAlertActions,
   updateCriticalAlertState
 };

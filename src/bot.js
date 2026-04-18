@@ -12,10 +12,12 @@ const {
 } = require("./storage");
 const {
   getCloseOfDayReportActionState,
+  getCriticalAlertState,
   getTelegramLinkByChatId,
   getTelegramLinksForUsernames,
   linkTelegramUser,
-  recordCloseOfDayReportAction
+  recordCloseOfDayReportAction,
+  recordCriticalAlertAction
 } = require("./automation-state");
 const {
   buildManagementDetailMessages,
@@ -175,6 +177,74 @@ function createReportActionMessage(dateValue, username = "") {
   };
 }
 
+function createCriticalAlertActionKeyboard(dateValue) {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback("Vazuta", `cal:view:${dateValue}`),
+      Markup.button.callback("In lucru", `cal:work:${dateValue}`),
+      Markup.button.callback("Rezolvata", `cal:resolve:${dateValue}`)
+    ]
+  ]);
+}
+
+function formatActionActors(actionMap) {
+  const entries = Object.entries(actionMap || {})
+    .filter(([, timestamp]) => Boolean(timestamp))
+    .sort((left, right) => String(left[1]).localeCompare(String(right[1])))
+    .slice(0, 4);
+
+  if (!entries.length) {
+    return "nimeni";
+  }
+
+  return entries
+    .map(([username, timestamp]) => `${username} ${String(timestamp).replace("T", " ").slice(0, 16)}`)
+    .join(" | ");
+}
+
+function getCriticalAlertWorkflowStatus(alertState) {
+  if (Object.keys(alertState.actions?.resolvedBy || {}).length) {
+    return "rezolvata";
+  }
+
+  if (Object.keys(alertState.actions?.inProgressBy || {}).length) {
+    return "in lucru";
+  }
+
+  if (Object.keys(alertState.actions?.viewedBy || {}).length) {
+    return "vazuta";
+  }
+
+  if (alertState.escalation?.escalatedAt) {
+    return "escaladata fara raspuns";
+  }
+
+  return "noua";
+}
+
+function createCriticalAlertActionMessage(dateValue, username = "") {
+  const alertState = getCriticalAlertState(dateValue);
+  const normalizedUsername = String(username || "").trim().toLowerCase();
+  const workflowStatus = getCriticalAlertWorkflowStatus(alertState);
+  const escalationInfo = alertState.escalation?.escalatedAt
+    ? `da, la ${String(alertState.escalation.escalatedAt).replace("T", " ").slice(0, 16)}`
+    : "nu";
+
+  return {
+    text: [
+      `Confirmare alerta critica ${dateValue}:`,
+      `Status workflow: ${workflowStatus}`,
+      `Escalata: ${escalationInfo}`,
+      `Vazuta: ${formatActionActors(alertState.actions.viewedBy)}`,
+      `In lucru: ${formatActionActors(alertState.actions.inProgressBy)}`,
+      `Rezolvata: ${formatActionActors(alertState.actions.resolvedBy)}`,
+      `Tu: vazuta ${alertState.actions.viewedBy[normalizedUsername] ? "da" : "nu"} | in lucru ${alertState.actions.inProgressBy[normalizedUsername] ? "da" : "nu"} | rezolvata ${alertState.actions.resolvedBy[normalizedUsername] ? "da" : "nu"}`,
+      `Ultima confirmare: ${alertState.actions.lastAction ? `${alertState.actions.lastAction.type} de ${alertState.actions.lastAction.username} la ${String(alertState.actions.lastAction.at).replace("T", " ").slice(0, 16)}` : "nicio confirmare"}`
+    ].join("\n"),
+    extra: createCriticalAlertActionKeyboard(dateValue)
+  };
+}
+
 async function appendTelegramActionAudit(username, action, dateValue, details = {}) {
   await appendAuditLog({
     entityType: "automation",
@@ -202,6 +272,18 @@ async function refreshReportActionMessage(ctx, dateValue, username) {
   } catch (error) {
     if (!String(error.message || "").toLowerCase().includes("message is not modified")) {
       console.error("Failed to refresh report action panel:", error.message);
+    }
+  }
+}
+
+async function refreshCriticalAlertActionMessage(ctx, dateValue, username) {
+  const payload = createCriticalAlertActionMessage(dateValue, username);
+
+  try {
+    await ctx.editMessageText(payload.text, payload.extra);
+  } catch (error) {
+    if (!String(error.message || "").toLowerCase().includes("message is not modified")) {
+      console.error("Failed to refresh critical alert panel:", error.message);
     }
   }
 }
@@ -368,6 +450,10 @@ async function sendTelegramMessagesToAudience(usernames = [], messages = []) {
           return createReportActionMessage(message.reportActionDate, target.username);
         }
 
+        if (message?.criticalAlertDate) {
+          return createCriticalAlertActionMessage(message.criticalAlertDate, target.username);
+        }
+
         return message;
       });
 
@@ -478,6 +564,47 @@ function startBot(token) {
     } catch (error) {
       console.error("Telegram quick action failed:", error.message);
       await ctx.answerCbQuery("Actiunea nu a reusit.", { show_alert: true });
+    }
+  });
+
+  bot.action(/^cal:(view|work|resolve):(\d{4}-\d{2}-\d{2})$/, async (ctx) => {
+    const [, action, dateValue] = ctx.match || [];
+    const username = resolveLinkedUsername(ctx);
+
+    if (!username) {
+      await ctx.answerCbQuery("Leaga mai intai contul intern cu /start.", { show_alert: true });
+      return;
+    }
+
+    try {
+      recordCriticalAlertAction(dateValue, username, action);
+      await appendAuditLog({
+        entityType: "automation",
+        entityId: 1,
+        action: `telegram-critical-${action}`,
+        reason: `Confirmare alerta critica: ${action}`,
+        user: username,
+        newValue: {
+          date: dateValue,
+          chatId: String(ctx.chat?.id || "").trim()
+        }
+      });
+      await refreshCriticalAlertActionMessage(ctx, dateValue, username);
+
+      if (action === "view") {
+        await ctx.answerCbQuery("Alerta marcata ca vazuta.");
+        return;
+      }
+
+      if (action === "work") {
+        await ctx.answerCbQuery("Alerta marcata in lucru.");
+        return;
+      }
+
+      await ctx.answerCbQuery("Alerta marcata rezolvata.");
+    } catch (error) {
+      console.error("Critical alert confirmation failed:", error.message);
+      await ctx.answerCbQuery("Confirmarea nu a reusit.", { show_alert: true });
     }
   });
 
