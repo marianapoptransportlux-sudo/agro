@@ -56,6 +56,10 @@ const automationStatusSummaryEl = document.getElementById("automation-status-sum
 const automationAudienceBodyEl = document.getElementById("automation-audience-body");
 const automationMessageEl = document.getElementById("automation-message");
 const runCloseOfDayButtonEl = document.getElementById("run-close-of-day-button");
+const criticalAlertsSummaryEl = document.getElementById("critical-alerts-summary");
+const criticalAlertsBodyEl = document.getElementById("critical-alerts-body");
+const criticalAlertsMessageEl = document.getElementById("critical-alerts-message");
+const runCriticalAlertsCheckButtonEl = document.getElementById("run-critical-alerts-check-button");
 const estimateHumidityNormEl = document.getElementById("estimate-humidity-norm");
 const estimateImpurityNormEl = document.getElementById("estimate-impurity-norm");
 const estimateNetEl = document.getElementById("estimate-net");
@@ -142,7 +146,9 @@ let complaintsCache = [];
 let auditLogsCache = [];
 let lockoutsCache = [];
 let automationStatusCache = null;
+let criticalAlertsStatusCache = null;
 let currentSessionUser = null;
+let automationRefreshTimer = null;
 
 const nativeFetch = window.fetch.bind(window);
 
@@ -281,6 +287,34 @@ function togglePasswordPanel(show) {
     changePasswordFormEl.reset();
     changePasswordMessageEl.textContent = "";
   }
+}
+
+function stopAutomationRefreshLoop() {
+  if (automationRefreshTimer) {
+    window.clearInterval(automationRefreshTimer);
+    automationRefreshTimer = null;
+  }
+}
+
+function startAutomationRefreshLoop() {
+  stopAutomationRefreshLoop();
+
+  if (!canAccess("setup")) {
+    return;
+  }
+
+  automationRefreshTimer = window.setInterval(async () => {
+    if (!currentSessionUser || !canAccess("setup")) {
+      stopAutomationRefreshLoop();
+      return;
+    }
+
+    try {
+      await Promise.all([loadAutomationStatus(), loadCriticalAlertsStatus()]);
+    } catch (error) {
+      console.error("Automation refresh failed:", error.message);
+    }
+  }, 60 * 1000);
 }
 
 async function apiFetch(input, init = {}) {
@@ -610,6 +644,57 @@ function renderAutomationStatus(status) {
           <td>${item.channel || "-"}</td>
           <td>${item.canReceiveTelegram ? "Legat" : "Lipsa legare"}</td>
           <td>${item.lastSeenAt ? new Date(item.lastSeenAt).toLocaleString("ro-RO") : "-"}</td>
+        </tr>
+      `
+    )
+    .join("");
+}
+
+function renderCriticalAlertsStatus(status) {
+  if (!criticalAlertsSummaryEl || !criticalAlertsBodyEl) {
+    return;
+  }
+
+  if (!status) {
+    criticalAlertsSummaryEl.innerHTML = "";
+    criticalAlertsBodyEl.innerHTML = "";
+    return;
+  }
+
+  const cards = [
+    ["Bot Telegram", status.botReady ? "Activ" : "Inactiv"],
+    ["Alerte urmarite", String(status.totalTrackedAlerts || 0)],
+    ["Alerte critice deschise", String(status.criticalOpenAlerts || 0)],
+    ["Escaladate", String(status.escalatedAlerts || 0)]
+  ];
+
+  criticalAlertsSummaryEl.innerHTML = cards
+    .map(
+      ([label, value]) => `
+        <article class="estimate-card">
+          <span>${label}</span>
+          <strong>${value}</strong>
+        </article>
+      `
+    )
+    .join("");
+
+  criticalAlertsBodyEl.innerHTML = (status.criticalAlerts || [])
+    .map(
+      (item) => `
+        <tr>
+          <td>${item.date}</td>
+          <td>${item.status}</td>
+          <td>${item.workflowStatus}</td>
+          <td>${item.lastReason || "-"}</td>
+          <td>V:${item.viewedCount} | L:${item.inProgressCount} | R:${item.resolvedCount}</td>
+          <td>
+            Vazuta: ${item.viewedActors || "-"}<br />
+            In lucru: ${item.inProgressActors || "-"}<br />
+            Rezolvata: ${item.resolvedActors || "-"}
+          </td>
+          <td>${item.escalatedAt ? `${item.escalationCount} / ${new Date(item.escalatedAt).toLocaleString("ro-RO")} / ${item.escalationReason || "-"}` : "-"}</td>
+          <td>${item.lastAlertAt ? new Date(item.lastAlertAt).toLocaleString("ro-RO") : "-"}</td>
         </tr>
       `
     )
@@ -1728,6 +1813,19 @@ async function loadAutomationStatus() {
   renderAutomationStatus(data);
 }
 
+async function loadCriticalAlertsStatus() {
+  if (!canAccess("setup") || !criticalAlertsSummaryEl) {
+    criticalAlertsStatusCache = null;
+    renderCriticalAlertsStatus(null);
+    return;
+  }
+
+  const response = await fetch("/api/automation/critical-alerts/status");
+  const data = await response.json();
+  criticalAlertsStatusCache = data;
+  renderCriticalAlertsStatus(data);
+}
+
 async function loadOpeningDocuments() {
   if (!canAccess("opening")) {
     openingDocumentsCache = [];
@@ -1809,6 +1907,7 @@ async function loadDashboard() {
     loadAuditLogs(),
     loadLockouts(),
     loadAutomationStatus(),
+    loadCriticalAlertsStatus(),
     loadDailyReport()
   ]);
 }
@@ -2949,6 +3048,30 @@ if (runCloseOfDayButtonEl) {
   });
 }
 
+if (runCriticalAlertsCheckButtonEl) {
+  runCriticalAlertsCheckButtonEl.addEventListener("click", async () => {
+    criticalAlertsMessageEl.textContent = "Verific alertarea critica...";
+
+    try {
+      const response = await fetch("/api/automation/critical-alerts/check", {
+        method: "POST"
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Nu am putut rula verificarea alertelor critice.");
+      }
+
+      criticalAlertsMessageEl.textContent = `Verificare finalizata: alerta ${data.checkResult?.reason || "-"}, escaladare ${data.escalationResult?.reason || "-"}.`;
+      criticalAlertsStatusCache = data.status || null;
+      renderCriticalAlertsStatus(criticalAlertsStatusCache);
+      await loadAuditLogs();
+    } catch (error) {
+      criticalAlertsMessageEl.textContent = error.message;
+    }
+  });
+}
+
 loginFormEl.addEventListener("submit", async (event) => {
   event.preventDefault();
   loginMessageEl.textContent = "Se verifica accesul...";
@@ -2962,12 +3085,14 @@ loginFormEl.addEventListener("submit", async (event) => {
     showDashboardShell();
     loginMessageEl.textContent = "";
     await loadDashboard();
+    startAutomationRefreshLoop();
   } catch (error) {
     loginMessageEl.textContent = error.message;
   }
 });
 
 logoutButtonEl.addEventListener("click", async () => {
+  stopAutomationRefreshLoop();
   await logout();
   setCurrentUser(null);
   showLoginScreen("Sesiunea a fost inchisa.");
@@ -3003,6 +3128,7 @@ changePasswordFormEl.addEventListener("submit", async (event) => {
 async function bootstrap() {
   resetEditor();
   togglePasswordPanel(false);
+  stopAutomationRefreshLoop();
 
   try {
     const user = await loadSession();
@@ -3014,8 +3140,10 @@ async function bootstrap() {
     setCurrentUser(user);
     showDashboardShell();
     await loadDashboard();
+    startAutomationRefreshLoop();
   } catch (error) {
     console.error("Bootstrap failed:", error.message);
+    stopAutomationRefreshLoop();
     setCurrentUser(null);
     showLoginScreen("Nu am putut initializa sesiunea.");
   }

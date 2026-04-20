@@ -1254,6 +1254,35 @@
             </div>
           </article>
 
+          <article class="panel" data-access="setup">
+            <div class="panel-head">
+              <h2>Alerte critice Telegram</h2>
+              <p>Monitorizare alerte CRITIC, workflow de raspuns si escaladare automata.</p>
+            </div>
+            <div class="automation-status" id="critical-alerts-summary"></div>
+            <div class="editor-actions">
+              <button type="button" id="run-critical-alerts-check-button">Verifica alertele critice acum</button>
+              <p class="form-message" id="critical-alerts-message"></p>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Status</th>
+                    <th>Workflow</th>
+                    <th>Motiv</th>
+                    <th>Confirmari</th>
+                    <th>Actori</th>
+                    <th>Escaladare</th>
+                    <th>Ultima alerta</th>
+                  </tr>
+                </thead>
+                <tbody id="critical-alerts-body"></tbody>
+              </table>
+            </div>
+          </article>
+
           <article class="panel" data-access="security-admin">
             <div class="panel-head">
               <h2>Securitate acces</h2>

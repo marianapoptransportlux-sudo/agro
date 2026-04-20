@@ -6,8 +6,13 @@ const repoRoot = path.resolve(__dirname, "..");
 
 const modulePathsToReset = [
   "src/auth.js",
+  "src/automation-handlers.js",
+  "src/automation-state.js",
+  "src/bot.js",
+  "src/critical-alerts.js",
   "src/runtime-backup.js",
   "src/local-storage.js",
+  "src/management-report.js",
   "src/storage.js",
   "src/auth-handlers.js"
 ];

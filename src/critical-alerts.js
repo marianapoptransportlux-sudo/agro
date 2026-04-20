@@ -17,6 +17,7 @@ const {
 const {
   createDefaultCriticalAlertEscalation,
   getCriticalAlertState,
+  getTelegramLinksForUsernames,
   listCriticalAlertStates,
   resetCriticalAlertActions,
   updateCriticalAlertState
@@ -36,6 +37,45 @@ function parseAudience(reportAudience) {
     .split(",")
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
+}
+
+function getCriticalAlertWorkflowStatus(alertState) {
+  if (Object.keys(alertState.actions?.resolvedBy || {}).length) {
+    return "Rezolvata";
+  }
+
+  if (Object.keys(alertState.actions?.inProgressBy || {}).length) {
+    return "In lucru";
+  }
+
+  if (Object.keys(alertState.actions?.viewedBy || {}).length) {
+    return "Vazuta";
+  }
+
+  if (alertState.escalation?.escalatedAt) {
+    return "Escalata";
+  }
+
+  if (alertState.lastStatus === "CRITIC") {
+    return "Fara raspuns";
+  }
+
+  return "Monitorizare";
+}
+
+function formatActors(actionMap = {}) {
+  const entries = Object.entries(actionMap)
+    .filter(([, timestamp]) => Boolean(timestamp))
+    .sort((left, right) => String(left[1]).localeCompare(String(right[1])))
+    .slice(0, 6);
+
+  if (!entries.length) {
+    return "";
+  }
+
+  return entries
+    .map(([username, timestamp]) => `${username} ${String(timestamp).replace("T", " ").slice(0, 16)}`)
+    .join(" | ");
 }
 
 function buildCriticalFingerprint(snapshot) {
@@ -260,6 +300,47 @@ async function maybeEscalateCriticalAlerts() {
   return { checked: true, escalated, reason: escalated ? "escalated" : "no-pending-alerts" };
 }
 
+async function getCriticalAlertsStatus() {
+  const config = await getConfig();
+  const settings = config.systemSettings || {};
+  const audience = parseAudience(settings.reportAudience);
+  const linkedRecipients = getTelegramLinksForUsernames(audience);
+  const criticalAlerts = listCriticalAlertStates()
+    .sort((left, right) => String(right.date || "").localeCompare(String(left.date || "")))
+    .slice(0, 12)
+    .map((item) => ({
+      date: item.date,
+      status: item.lastStatus || "-",
+      workflowStatus: getCriticalAlertWorkflowStatus(item),
+      lastReason: item.lastReason || "-",
+      lastTrigger: item.lastTrigger || "-",
+      lastAlertAt: item.lastAlertAt || "",
+      lastEvaluatedAt: item.lastEvaluatedAt || "",
+      viewedCount: Object.keys(item.actions?.viewedBy || {}).length,
+      viewedActors: formatActors(item.actions?.viewedBy || {}),
+      inProgressCount: Object.keys(item.actions?.inProgressBy || {}).length,
+      inProgressActors: formatActors(item.actions?.inProgressBy || {}),
+      resolvedCount: Object.keys(item.actions?.resolvedBy || {}).length,
+      resolvedActors: formatActors(item.actions?.resolvedBy || {}),
+      lastAction: item.actions?.lastAction || null,
+      escalatedAt: item.escalation?.escalatedAt || "",
+      escalationCount: Number(item.escalation?.escalationCount || 0),
+      escalationReason: item.escalation?.lastEscalationReason || "",
+      escalationTrigger: item.escalation?.lastEscalationTrigger || ""
+    }));
+
+  return {
+    botReady: isBotReady(),
+    reportChannel: String(settings.reportChannel || "").trim().toLowerCase(),
+    reportAudience: String(settings.reportAudience || "").trim(),
+    totalTrackedAlerts: criticalAlerts.length,
+    criticalOpenAlerts: criticalAlerts.filter((item) => item.status === "CRITIC" && item.workflowStatus !== "Rezolvata").length,
+    escalatedAlerts: criticalAlerts.filter((item) => item.escalatedAt).length,
+    linkedRecipients: linkedRecipients.length,
+    criticalAlerts
+  };
+}
+
 function startCriticalAlertMonitor() {
   if (escalationMonitorInterval) {
     return escalationMonitorInterval;
@@ -282,6 +363,7 @@ function triggerCriticalManagementAlert(options = {}) {
 }
 
 module.exports = {
+  getCriticalAlertsStatus,
   maybeSendCriticalManagementAlert,
   maybeEscalateCriticalAlerts,
   startCriticalAlertMonitor,

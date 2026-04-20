@@ -4,7 +4,9 @@ const express = require("express");
 const path = require("path");
 const { startBot } = require("./bot");
 const {
+  getCriticalAlertsStatusHandler,
   getCloseOfDayStatusHandler,
+  runCriticalAlertsCheckHandler,
   runCloseOfDayHandler
 } = require("./automation-handlers");
 const { startCloseOfDayScheduler } = require("./close-of-day");
@@ -169,6 +171,8 @@ app.post("/api/security/lockouts/:username/unlock", requireRoles(["admin"]), asy
 });
 app.get("/api/automation/close-of-day/status", requireRoles(["admin"]), getCloseOfDayStatusHandler);
 app.post("/api/automation/close-of-day/run", requireRoles(["admin"]), runCloseOfDayHandler);
+app.get("/api/automation/critical-alerts/status", requireRoles(["admin"]), getCriticalAlertsStatusHandler);
+app.post("/api/automation/critical-alerts/check", requireRoles(["admin"]), runCriticalAlertsCheckHandler);
 
 app.get("*", (_req, res) => {
   res.sendFile(path.join(process.cwd(), "public", "index.html"));
