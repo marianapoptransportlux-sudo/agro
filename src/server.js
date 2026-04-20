@@ -20,6 +20,11 @@ const {
   updateSystemSettingsHandler
 } = require("./config-handlers");
 const {
+  createUserHandler,
+  listUsersHandler,
+  updateUserHandler
+} = require("./user-handlers");
+const {
   createReceiptHandler,
   healthHandler,
   listReceiptsHandler,
@@ -98,7 +103,7 @@ app.use("/api", requireAuth);
 
 app.get(
   "/api/opening-documents",
-  requireRoles(["manager", "accountant", "admin", "control"]),
+  requireRoles(["manager", "accountant", "admin"]),
   listOpeningDocumentsHandler
 );
 
@@ -119,8 +124,13 @@ app.patch("/api/config/:entity/:id", requireRoles(["admin"]), async (req, res) =
 });
 
 app.patch("/api/system-settings", requireRoles(["admin"]), updateSystemSettingsHandler);
+app.get("/api/users", requireRoles(["admin"]), listUsersHandler);
+app.post("/api/users", requireRoles(["admin"]), createUserHandler);
+app.patch("/api/users/:id", requireRoles(["admin"]), async (req, res) => {
+  return updateUserHandler(req, res, req.params.id);
+});
 
-app.get("/api/receipts", requireRoles(["operator", "manager", "accountant", "admin", "control"]), listReceiptsHandler);
+app.get("/api/receipts", requireRoles(["operator", "manager", "accountant", "admin"]), listReceiptsHandler);
 
 app.post("/api/receipts", requireRoles(["operator", "manager", "admin"]), createReceiptHandler);
 
@@ -128,7 +138,7 @@ app.patch("/api/receipts/:id/status", requireRoles(["operator", "manager", "admi
   return updateReceiptStatusHandler(req, res, req.params.id);
 });
 
-app.get("/api/processings", requireRoles(["operator", "manager", "accountant", "admin", "control"]), listProcessingsHandler);
+app.get("/api/processings", requireRoles(["operator", "manager", "accountant", "admin"]), listProcessingsHandler);
 
 app.post("/api/processings", requireRoles(["operator", "manager", "admin"]), createProcessingHandler);
 
@@ -136,9 +146,9 @@ app.patch("/api/processings/:id", requireRoles(["operator", "manager", "admin"])
   return updateProcessingHandler(req, res, req.params.id);
 });
 
-app.get("/api/stocks", requireRoles(["operator", "manager", "accountant", "admin", "control"]), getStockSummaryHandler);
+app.get("/api/stocks", requireRoles(["operator", "manager", "accountant", "admin"]), getStockSummaryHandler);
 
-app.get("/api/transactions", requireRoles(["manager", "accountant", "admin", "control"]), listTransactionsHandler);
+app.get("/api/transactions", requireRoles(["manager", "accountant", "admin"]), listTransactionsHandler);
 
 app.post("/api/transactions", requireRoles(["manager", "accountant", "admin"]), createTransactionHandler);
 
@@ -146,7 +156,7 @@ app.patch("/api/transactions/:id", requireRoles(["manager", "accountant", "admin
   return updateTransactionHandler(req, res, req.params.id);
 });
 
-app.get("/api/deliveries", requireRoles(["operator", "manager", "accountant", "admin", "control"]), listDeliveriesHandler);
+app.get("/api/deliveries", requireRoles(["operator", "manager", "accountant", "admin"]), listDeliveriesHandler);
 
 app.post("/api/deliveries", requireRoles(["operator", "manager", "admin"]), createDeliveryHandler);
 
@@ -154,7 +164,7 @@ app.patch("/api/deliveries/:id", requireRoles(["operator", "manager", "admin"]),
   return updateDeliveryHandler(req, res, req.params.id);
 });
 
-app.get("/api/complaints", requireRoles(["operator", "manager", "accountant", "admin", "control"]), listComplaintsHandler);
+app.get("/api/complaints", requireRoles(["operator", "manager", "accountant", "admin"]), listComplaintsHandler);
 
 app.post("/api/complaints", requireRoles(["operator", "manager", "accountant", "admin"]), createComplaintHandler);
 
@@ -162,9 +172,9 @@ app.patch("/api/complaints/:id", requireRoles(["manager", "accountant", "admin"]
   return updateComplaintHandler(req, res, req.params.id);
 });
 
-app.get("/api/reports/daily", requireRoles(["manager", "accountant", "admin", "control"]), getDailyReportHandler);
+app.get("/api/reports/daily", requireRoles(["manager", "accountant", "admin"]), getDailyReportHandler);
 
-app.get("/api/audit-logs", requireRoles(["manager", "admin", "control"]), listAuditLogsHandler);
+app.get("/api/audit-logs", requireRoles(["manager", "admin"]), listAuditLogsHandler);
 app.get("/api/security/lockouts", requireRoles(["admin"]), listLockoutsHandler);
 app.post("/api/security/lockouts/:username/unlock", requireRoles(["admin"]), async (req, res) => {
   return unlockUsernameHandler(req, res, req.params.username);

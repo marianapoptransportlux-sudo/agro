@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { getRoleName, getRolePermissions, normalizeRoleCode } = require("./permissions");
 
 const SESSION_COOKIE_NAME = "agro_session";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
@@ -43,11 +44,14 @@ function sanitizeUserForSession(user) {
     return null;
   }
 
+  const roleCode = normalizeRoleCode(user.roleCode);
   return {
     id: user.id,
     name: user.name,
     username: user.username,
-    roleCode: user.roleCode,
+    roleCode,
+    roleName: getRoleName(roleCode),
+    permissions: getRolePermissions(roleCode),
     channel: user.channel,
     active: user.active !== false
   };
@@ -280,14 +284,14 @@ function requireAuth(req, res, next) {
 }
 
 function requireRoles(allowedRoles = []) {
-  const normalizedRoles = allowedRoles.map((item) => String(item || "").trim()).filter(Boolean);
+  const normalizedRoles = allowedRoles.map((item) => normalizeRoleCode(item)).filter(Boolean);
 
   return (req, res, next) => {
     if (!req.currentUser) {
       return res.status(401).json({ error: "Autentificare necesara." });
     }
 
-    if (normalizedRoles.includes(req.currentUser.roleCode)) {
+    if (normalizedRoles.includes(normalizeRoleCode(req.currentUser.roleCode))) {
       return next();
     }
 
