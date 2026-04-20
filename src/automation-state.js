@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { writeJsonAtomic } = require("./atomic-write");
 
 const runtimeDir = path.join(process.cwd(), ".runtime-data");
 const automationStateFile = path.join(runtimeDir, "automation-state.json");
@@ -27,7 +28,7 @@ function readAutomationState() {
   ensureRuntimeDir();
 
   if (!fs.existsSync(automationStateFile)) {
-    fs.writeFileSync(automationStateFile, JSON.stringify(defaultAutomationState, null, 2), "utf8");
+    writeJsonAtomic(automationStateFile, defaultAutomationState);
     return JSON.parse(JSON.stringify(defaultAutomationState));
   }
 
@@ -63,7 +64,7 @@ function readAutomationState() {
 
 function writeAutomationState(state) {
   ensureRuntimeDir();
-  fs.writeFileSync(automationStateFile, JSON.stringify(state, null, 2), "utf8");
+  writeJsonAtomic(automationStateFile, state);
 }
 
 function linkTelegramUser(username, chatInfo = {}) {

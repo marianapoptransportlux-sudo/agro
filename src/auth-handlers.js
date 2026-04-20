@@ -12,6 +12,8 @@ const {
   registerFailedLoginForUsername,
   sanitizeUserForSession,
   setSessionCookie,
+  updateSessionUser,
+  validatePasswordPolicy,
   verifyPassword
 } = require("./auth");
 
@@ -157,8 +159,10 @@ async function changePasswordHandler(req, res) {
     return sendJson(res, 400, { error: "Confirmarea parolei nu corespunde." });
   }
 
-  if (String(newPassword).trim().length < 8) {
-    return sendJson(res, 400, { error: "Parola noua trebuie sa aiba minim 8 caractere." });
+  try {
+    validatePasswordPolicy(newPassword, { mode: "strict" });
+  } catch (policyError) {
+    return sendJson(res, 400, { error: policyError.message });
   }
 
   try {
@@ -186,6 +190,7 @@ async function changePasswordHandler(req, res) {
     }
 
     const updatedUser = await updateUserPasswordById(fullUser.id, newPassword);
+    updateSessionUser(fullUser.id, { requirePasswordChange: false });
     await appendAuditLog({
       entityType: "auth",
       entityId: fullUser.id,
