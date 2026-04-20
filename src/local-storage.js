@@ -137,6 +137,16 @@ const configEntities = [
 ];
 
 const defaultUserPassword = process.env.DEFAULT_USER_PASSWORD || "Agro2026!";
+const MIN_USER_PASSWORD_LENGTH = 8;
+
+function assertPasswordStrength(password) {
+  const normalized = String(password || "");
+  if (normalized.length < MIN_USER_PASSWORD_LENGTH) {
+    throw new Error(
+      `Parola utilizatorului trebuie sa aiba minim ${MIN_USER_PASSWORD_LENGTH} caractere.`
+    );
+  }
+}
 
 function slugifyUsername(value) {
   const normalized = String(value || "")
@@ -1463,6 +1473,7 @@ async function updateUserPasswordById(userId, password) {
     throw new Error("Parola noua este obligatorie.");
   }
 
+  assertPasswordStrength(normalizedPassword);
   const passwordRecord = createPasswordRecord(normalizedPassword);
   user.passwordSalt = passwordRecord.salt;
   user.passwordHash = passwordRecord.hash;
@@ -1521,6 +1532,9 @@ async function createConfigEntry(entity, payload) {
     throw new Error("Rolul selectat pentru utilizator nu exista.");
   }
 
+  if (entity === "users") {
+    assertPasswordStrength(normalized.password || defaultUserPassword);
+  }
   const passwordRecord =
     entity === "users"
       ? createPasswordRecord(normalized.password || defaultUserPassword)
@@ -1606,6 +1620,7 @@ async function updateConfigEntry(entity, id, payload) {
   });
 
   if (entity === "users" && normalized.password) {
+    assertPasswordStrength(normalized.password);
     const passwordRecord = createPasswordRecord(normalized.password);
     existing.passwordSalt = passwordRecord.salt;
     existing.passwordHash = passwordRecord.hash;

@@ -291,6 +291,8 @@ async function updateReceiptStatusHandler(req, res, id) {
 }
 
 module.exports = {
+  computeReceiptEstimate,
+  findTariffValue,
   createReceiptHandler,
   healthHandler,
   listReceiptsHandler,
