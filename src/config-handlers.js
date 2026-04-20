@@ -33,11 +33,14 @@ async function getConfigHandler(_req, res) {
 
 async function createConfigEntryHandler(req, res, entity) {
   try {
-    const entry = await createConfigEntry(entity, getBody(req));
+    const entry = await createConfigEntry(entity, {
+      ...getBody(req),
+      changedBy: getActorLabel(req)
+    });
     return sendJson(res, 201, entry);
   } catch (error) {
     console.error(`Failed to create config entry for ${entity}:`, error.message);
-    return sendJson(res, 400, { error: "Nu am putut salva elementul de configurare." });
+    return sendJson(res, 400, { error: error.message || "Nu am putut salva elementul de configurare." });
   }
 }
 

@@ -2,6 +2,7 @@ const crypto = require("crypto");
 
 const SESSION_COOKIE_NAME = "agro_session";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
+const SESSION_INACTIVITY_MS = 1000 * 60 * 30;
 const LOGIN_WINDOW_MS = 1000 * 60 * 15;
 const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_BLOCK_MS = 1000 * 60 * 15;
@@ -10,11 +11,58 @@ const sessions = new Map();
 const loginAttemptsByIp = new Map();
 const loginAttemptsByUsername = new Map();
 
-function createPasswordRecord(password) {
+const PASSWORD_BLACKLIST = new Set([
+  "agro2026!",
+  "password",
+  "parola",
+  "123456",
+  "12345678",
+  "admin",
+  "operator",
+  "manager",
+  "qwerty",
+  "contabil"
+]);
+
+function validatePasswordPolicy(password, options = {}) {
+  const mode = options.mode === "lenient" ? "lenient" : "strict";
+  const normalized = String(password || "");
+
+  if (!normalized) {
+    throw new Error("Parola este obligatorie.");
+  }
+
+  if (mode === "lenient") {
+    if (normalized.length < 6) {
+      throw new Error("Parola trebuie sa aiba minim 6 caractere.");
+    }
+    return true;
+  }
+
+  if (PASSWORD_BLACKLIST.has(normalized.toLowerCase())) {
+    throw new Error("Parola este prea comuna. Alege o parola mai complexa.");
+  }
+
+  if (normalized.length < 10) {
+    throw new Error("Parola trebuie sa aiba minim 10 caractere.");
+  }
+
+  const hasLetter = /[a-zA-Z]/.test(normalized);
+  const hasDigit = /[0-9]/.test(normalized);
+  if (!hasLetter || !hasDigit) {
+    throw new Error("Parola trebuie sa contina cel putin o litera si o cifra.");
+  }
+
+  return true;
+}
+
+function createPasswordRecord(password, options = {}) {
   const normalizedPassword = String(password || "").trim();
   if (!normalizedPassword) {
     throw new Error("Parola este obligatorie.");
   }
+
+  validatePasswordPolicy(normalizedPassword, options);
 
   const salt = crypto.randomBytes(16).toString("hex");
   const hash = crypto.scryptSync(normalizedPassword, salt, 64).toString("hex");
@@ -49,7 +97,8 @@ function sanitizeUserForSession(user) {
     username: user.username,
     roleCode: user.roleCode,
     channel: user.channel,
-    active: user.active !== false
+    active: user.active !== false,
+    requirePasswordChange: user.requirePasswordChange === true
   };
 }
 
@@ -75,6 +124,10 @@ function cleanupExpiredSessions() {
   const now = Date.now();
   for (const [token, session] of sessions.entries()) {
     if (!session || session.expiresAt <= now) {
+      sessions.delete(token);
+      continue;
+    }
+    if (session.lastActivityAt && now - session.lastActivityAt > SESSION_INACTIVITY_MS) {
       sessions.delete(token);
     }
   }
@@ -109,10 +162,12 @@ function clearSessionCookie(res, req) {
 function createSession(user) {
   cleanupExpiredSessions();
   const token = crypto.randomBytes(32).toString("hex");
+  const now = Date.now();
   sessions.set(token, {
     user: sanitizeUserForSession(user),
-    createdAt: Date.now(),
-    expiresAt: Date.now() + SESSION_TTL_MS
+    createdAt: now,
+    expiresAt: now + SESSION_TTL_MS,
+    lastActivityAt: now
   });
   return token;
 }
@@ -120,6 +175,14 @@ function createSession(user) {
 function destroySession(token) {
   if (token) {
     sessions.delete(token);
+  }
+}
+
+function updateSessionUser(userId, patch) {
+  for (const session of sessions.values()) {
+    if (session?.user?.id === Number(userId)) {
+      Object.assign(session.user, patch);
+    }
   }
 }
 
@@ -261,7 +324,9 @@ function attachCurrentUser(req, _res, next) {
 
   if (token && sessions.has(token)) {
     const session = sessions.get(token);
-    if (session?.expiresAt > Date.now()) {
+    const now = Date.now();
+    if (session?.expiresAt > now && session?.lastActivityAt && now - session.lastActivityAt <= SESSION_INACTIVITY_MS) {
+      session.lastActivityAt = now;
       req.currentUser = session.user;
     } else {
       sessions.delete(token);
@@ -301,6 +366,7 @@ function getActorLabel(req) {
 
 module.exports = {
   SESSION_COOKIE_NAME,
+  SESSION_INACTIVITY_MS,
   attachCurrentUser,
   clearFailedLogins,
   clearFailedLoginsForUsername,
@@ -320,5 +386,7 @@ module.exports = {
   sanitizeUserForSession,
   setSessionCookie,
   unlockUsername,
+  updateSessionUser,
+  validatePasswordPolicy,
   verifyPassword
 };

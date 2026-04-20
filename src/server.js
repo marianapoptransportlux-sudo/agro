@@ -20,9 +20,11 @@ const {
   updateSystemSettingsHandler
 } = require("./config-handlers");
 const {
+  closeReceiptHandler,
   createReceiptHandler,
   healthHandler,
   listReceiptsHandler,
+  reopenReceiptHandler,
   updateReceiptStatusHandler
 } = require("./receipt-handlers");
 const {
@@ -32,7 +34,9 @@ const {
 } = require("./processing-handlers");
 const { getStockSummaryHandler } = require("./stock-handlers");
 const {
+  applyAdvanceHandler,
   createTransactionHandler,
+  listPartnerAdvancesHandler,
   listTransactionsHandler,
   updateTransactionHandler
 } = require("./transaction-handlers");
@@ -40,6 +44,7 @@ const { getDailyReportHandler } = require("./report-handlers");
 const {
   createDeliveryHandler,
   listDeliveriesHandler,
+  transitionDeliveryHandler,
   updateDeliveryHandler
 } = require("./delivery-handlers");
 const {
@@ -53,6 +58,13 @@ const {
   createOpeningDocumentHandler,
   listOpeningDocumentsHandler
 } = require("./opening-handlers");
+const {
+  exportResourceHandler,
+  getDashboardHandler,
+  getDeliveryDefaultsHandler,
+  getReceiptDefaultsHandler
+} = require("./report-extensions-handlers");
+const storage = require("./storage");
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
@@ -98,13 +110,13 @@ app.use("/api", requireAuth);
 
 app.get(
   "/api/opening-documents",
-  requireRoles(["manager", "accountant", "admin", "control"]),
+  requireRoles(["manager", "accountant", "accountant-sef", "admin", "control"]),
   listOpeningDocumentsHandler
 );
 
 app.post(
   "/api/opening-documents",
-  requireRoles(["manager", "accountant", "admin"]),
+  requireRoles(["manager", "accountant", "accountant-sef", "admin"]),
   createOpeningDocumentHandler
 );
 
@@ -120,7 +132,11 @@ app.patch("/api/config/:entity/:id", requireRoles(["admin"]), async (req, res) =
 
 app.patch("/api/system-settings", requireRoles(["admin"]), updateSystemSettingsHandler);
 
-app.get("/api/receipts", requireRoles(["operator", "manager", "accountant", "admin", "control"]), listReceiptsHandler);
+app.get(
+  "/api/receipts",
+  requireRoles(["operator", "manager", "accountant", "accountant-sef", "admin", "control"]),
+  listReceiptsHandler
+);
 
 app.post("/api/receipts", requireRoles(["operator", "manager", "admin"]), createReceiptHandler);
 
@@ -128,7 +144,19 @@ app.patch("/api/receipts/:id/status", requireRoles(["operator", "manager", "admi
   return updateReceiptStatusHandler(req, res, req.params.id);
 });
 
-app.get("/api/processings", requireRoles(["operator", "manager", "accountant", "admin", "control"]), listProcessingsHandler);
+app.post("/api/receipts/:id/close", requireRoles(["manager", "admin"]), async (req, res) => {
+  return closeReceiptHandler(req, res, req.params.id);
+});
+
+app.post("/api/receipts/:id/reopen", requireRoles(["manager", "admin"]), async (req, res) => {
+  return reopenReceiptHandler(req, res, req.params.id);
+});
+
+app.get(
+  "/api/processings",
+  requireRoles(["operator", "manager", "accountant", "accountant-sef", "admin", "control"]),
+  listProcessingsHandler
+);
 
 app.post("/api/processings", requireRoles(["operator", "manager", "admin"]), createProcessingHandler);
 
@@ -136,17 +164,49 @@ app.patch("/api/processings/:id", requireRoles(["operator", "manager", "admin"])
   return updateProcessingHandler(req, res, req.params.id);
 });
 
-app.get("/api/stocks", requireRoles(["operator", "manager", "accountant", "admin", "control"]), getStockSummaryHandler);
+app.get(
+  "/api/stocks",
+  requireRoles(["operator", "manager", "accountant", "accountant-sef", "admin", "control"]),
+  getStockSummaryHandler
+);
 
-app.get("/api/transactions", requireRoles(["manager", "accountant", "admin", "control"]), listTransactionsHandler);
+app.get(
+  "/api/transactions",
+  requireRoles(["manager", "accountant", "accountant-sef", "admin", "control"]),
+  listTransactionsHandler
+);
 
-app.post("/api/transactions", requireRoles(["manager", "accountant", "admin"]), createTransactionHandler);
+app.post(
+  "/api/transactions",
+  requireRoles(["manager", "accountant", "accountant-sef", "admin"]),
+  createTransactionHandler
+);
 
-app.patch("/api/transactions/:id", requireRoles(["manager", "accountant", "admin"]), async (req, res) => {
-  return updateTransactionHandler(req, res, req.params.id);
-});
+app.post(
+  "/api/transactions/apply-advance",
+  requireRoles(["manager", "accountant", "accountant-sef", "admin"]),
+  applyAdvanceHandler
+);
 
-app.get("/api/deliveries", requireRoles(["operator", "manager", "accountant", "admin", "control"]), listDeliveriesHandler);
+app.get(
+  "/api/partner-advances",
+  requireRoles(["manager", "accountant", "accountant-sef", "admin", "control"]),
+  listPartnerAdvancesHandler
+);
+
+app.patch(
+  "/api/transactions/:id",
+  requireRoles(["manager", "accountant", "accountant-sef", "admin"]),
+  async (req, res) => {
+    return updateTransactionHandler(req, res, req.params.id);
+  }
+);
+
+app.get(
+  "/api/deliveries",
+  requireRoles(["operator", "manager", "accountant", "accountant-sef", "admin", "control"]),
+  listDeliveriesHandler
+);
 
 app.post("/api/deliveries", requireRoles(["operator", "manager", "admin"]), createDeliveryHandler);
 
@@ -154,15 +214,77 @@ app.patch("/api/deliveries/:id", requireRoles(["operator", "manager", "admin"]),
   return updateDeliveryHandler(req, res, req.params.id);
 });
 
-app.get("/api/complaints", requireRoles(["operator", "manager", "accountant", "admin", "control"]), listComplaintsHandler);
-
-app.post("/api/complaints", requireRoles(["operator", "manager", "accountant", "admin"]), createComplaintHandler);
-
-app.patch("/api/complaints/:id", requireRoles(["manager", "accountant", "admin"]), async (req, res) => {
-  return updateComplaintHandler(req, res, req.params.id);
+app.post("/api/deliveries/:id/confirm", requireRoles(["operator", "manager", "admin"]), async (req, res) => {
+  return transitionDeliveryHandler(req, res, req.params.id, "Confirmat");
 });
 
-app.get("/api/reports/daily", requireRoles(["manager", "accountant", "admin", "control"]), getDailyReportHandler);
+app.post("/api/deliveries/:id/deliver", requireRoles(["operator", "manager", "admin"]), async (req, res) => {
+  return transitionDeliveryHandler(req, res, req.params.id, "Livrat");
+});
+
+app.post("/api/deliveries/:id/close", requireRoles(["manager", "admin"]), async (req, res) => {
+  return transitionDeliveryHandler(req, res, req.params.id, "Inchis");
+});
+
+app.post("/api/deliveries/:id/cancel", requireRoles(["manager", "admin"]), async (req, res) => {
+  return transitionDeliveryHandler(req, res, req.params.id, "Anulat");
+});
+
+app.post("/api/deliveries/:id/reopen", requireRoles(["manager", "admin"]), async (req, res) => {
+  return transitionDeliveryHandler(req, res, req.params.id, "Redeschis");
+});
+
+app.get(
+  "/api/complaints",
+  requireRoles(["operator", "manager", "accountant", "accountant-sef", "admin", "control"]),
+  listComplaintsHandler
+);
+
+app.post(
+  "/api/complaints",
+  requireRoles(["operator", "manager", "accountant", "accountant-sef", "admin"]),
+  createComplaintHandler
+);
+
+app.patch(
+  "/api/complaints/:id",
+  requireRoles(["accountant-sef", "accountant", "manager", "admin"]),
+  async (req, res) => {
+    return updateComplaintHandler(req, res, req.params.id);
+  }
+);
+
+app.get(
+  "/api/defaults/receipts",
+  requireRoles(["operator", "manager", "admin"]),
+  getReceiptDefaultsHandler
+);
+
+app.get(
+  "/api/defaults/deliveries",
+  requireRoles(["operator", "manager", "admin"]),
+  getDeliveryDefaultsHandler
+);
+
+app.get(
+  "/api/reports/dashboard",
+  requireRoles(["manager", "accountant", "accountant-sef", "admin", "control"]),
+  getDashboardHandler
+);
+
+app.get(
+  "/api/exports/:resource",
+  requireRoles(["manager", "accountant", "accountant-sef", "admin", "control"]),
+  async (req, res) => {
+    return exportResourceHandler(req, res, req.params.resource);
+  }
+);
+
+app.get(
+  "/api/reports/daily",
+  requireRoles(["manager", "accountant", "accountant-sef", "admin", "control"]),
+  getDailyReportHandler
+);
 
 app.get("/api/audit-logs", requireRoles(["manager", "admin", "control"]), listAuditLogsHandler);
 app.get("/api/security/lockouts", requireRoles(["admin"]), listLockoutsHandler);
@@ -178,9 +300,24 @@ app.get("*", (_req, res) => {
   res.sendFile(path.join(process.cwd(), "public", "index.html"));
 });
 
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
-  startBot(process.env.TELEGRAM_BOT_TOKEN);
-  startCloseOfDayScheduler();
-  startCriticalAlertMonitor();
-});
+if (typeof storage.runMigrationIfNeeded === "function") {
+  try {
+    const result = storage.runMigrationIfNeeded();
+    if (result?.migrated) {
+      console.log(`Migrare aplicata: ${result.version}`);
+    }
+  } catch (error) {
+    console.error("Migration error at boot:", error.message);
+  }
+}
+
+if (require.main === module) {
+  app.listen(port, () => {
+    console.log(`Server running on http://localhost:${port}`);
+    startBot(process.env.TELEGRAM_BOT_TOKEN);
+    startCloseOfDayScheduler();
+    startCriticalAlertMonitor();
+  });
+}
+
+module.exports = app;

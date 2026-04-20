@@ -3,6 +3,7 @@ const {
   getConfig,
   listDeliveries,
   listReceipts,
+  transitionDelivery,
   updateDelivery
 } = require("./storage");
 const { getActorLabel } = require("./auth");
@@ -36,9 +37,10 @@ async function createDeliveryHandler(req, res) {
   const body = getBody(req);
   const actor = getActorLabel(req);
 
-  if (!body.receiptId || !body.customerId || !body.deliveredQuantity) {
+  const plannedQuantity = body.plannedQuantity ?? body.deliveredQuantity;
+  if (!body.receiptId || !body.customerId || !plannedQuantity) {
     return sendJson(res, 400, {
-      error: "Campurile receiptId, customerId si deliveredQuantity sunt obligatorii."
+      error: "Campurile receiptId, customerId si plannedQuantity sunt obligatorii."
     });
   }
 
@@ -57,6 +59,7 @@ async function createDeliveryHandler(req, res) {
 
     const delivery = await createDelivery({
       ...body,
+      plannedQuantity,
       createdBy: actor,
       customer: customer.name
     });
@@ -69,7 +72,7 @@ async function createDeliveryHandler(req, res) {
     return response;
   } catch (error) {
     console.error("Failed to create delivery:", error.message);
-    return sendJson(res, 500, { error: error.message || "Nu am putut salva livrarea." });
+    return sendJson(res, 400, { error: error.message || "Nu am putut salva livrarea." });
   }
 }
 
@@ -96,8 +99,37 @@ async function updateDeliveryHandler(req, res, id) {
   }
 }
 
+async function transitionDeliveryHandler(req, res, id, newStatus) {
+  const body = getBody(req);
+  const actor = getActorLabel(req);
+
+  try {
+    const delivery = await transitionDelivery(id, newStatus, {
+      ...body,
+      changedBy: actor,
+      currentUser: req.currentUser || {}
+    });
+
+    if (!delivery) {
+      return sendJson(res, 404, { error: "Livrarea nu a fost gasita." });
+    }
+
+    const response = sendJson(res, 200, delivery);
+    triggerCriticalManagementAlert({
+      trigger: `delivery-${newStatus.toLowerCase()}`,
+      actor
+    });
+    return response;
+  } catch (error) {
+    console.error(`Failed to transition delivery to ${newStatus}:`, error.message);
+    const status = error.statusCode || 400;
+    return sendJson(res, status, { error: error.message || "Nu am putut actualiza livrarea." });
+  }
+}
+
 module.exports = {
   createDeliveryHandler,
   listDeliveriesHandler,
+  transitionDeliveryHandler,
   updateDeliveryHandler
 };

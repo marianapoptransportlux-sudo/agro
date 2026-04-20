@@ -69,7 +69,9 @@ async function updateComplaintHandler(req, res, id) {
   try {
     const complaint = await updateComplaint(id, {
       ...getBody(req),
-      changedBy: getActorLabel(req)
+      changedBy: getActorLabel(req),
+      currentUser: req.currentUser || {},
+      roleCode: req.currentUser?.roleCode || ""
     });
 
     if (!complaint) {
@@ -84,7 +86,8 @@ async function updateComplaintHandler(req, res, id) {
     return response;
   } catch (error) {
     console.error("Failed to update complaint:", error.message);
-    return sendJson(res, 400, { error: error.message || "Nu am putut actualiza reclamatia." });
+    const status = error.statusCode || 400;
+    return sendJson(res, status, { error: error.message || "Nu am putut actualiza reclamatia." });
   }
 }
 

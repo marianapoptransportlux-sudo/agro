@@ -1,8 +1,10 @@
 const {
+  applyAdvanceCredit,
   createTransaction,
   getConfig,
   listDeliveries,
   listOpeningDebtItems,
+  listPartnerAdvances,
   listReceipts,
   listTransactions,
   updateTransaction
@@ -181,8 +183,51 @@ async function updateTransactionHandler(req, res, id) {
   }
 }
 
+async function listPartnerAdvancesHandler(_req, res) {
+  try {
+    const advances = await listPartnerAdvances();
+    return sendJson(res, 200, { partnerAdvances: advances });
+  } catch (error) {
+    console.error("Failed to load partner advances:", error.message);
+    return sendJson(res, 500, { error: "Nu am putut incarca avansurile." });
+  }
+}
+
+async function applyAdvanceHandler(req, res) {
+  const body = getBody(req);
+  const actor = getActorLabel(req);
+
+  if (!body.partnerId || !body.targetReceiptId || !body.amount) {
+    return sendJson(res, 400, {
+      error: "partnerId, targetReceiptId si amount sunt obligatorii."
+    });
+  }
+
+  try {
+    const result = await applyAdvanceCredit({
+      partnerId: body.partnerId,
+      targetReceiptId: body.targetReceiptId,
+      amount: body.amount,
+      createdBy: actor,
+      currentUser: req.currentUser || {}
+    });
+
+    const response = sendJson(res, 201, result);
+    triggerCriticalManagementAlert({
+      trigger: "advance-applied",
+      actor
+    });
+    return response;
+  } catch (error) {
+    console.error("Failed to apply advance:", error.message);
+    return sendJson(res, 400, { error: error.message || "Nu am putut aplica avansul." });
+  }
+}
+
 module.exports = {
+  applyAdvanceHandler,
   createTransactionHandler,
+  listPartnerAdvancesHandler,
   listTransactionsHandler,
   updateTransactionHandler
 };
