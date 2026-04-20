@@ -1,8 +1,10 @@
 const {
+  closeReceipt,
   createReceipt,
   getConfig,
   getStats,
   listReceipts,
+  reopenReceipt,
   storageDriver,
   updateReceiptStatusWithAudit
 } = require("./storage");
@@ -221,9 +223,53 @@ async function updateReceiptStatusHandler(req, res, id) {
   }
 }
 
+async function closeReceiptHandler(req, res, id) {
+  try {
+    const receipt = await closeReceipt(id, {
+      ...getBody(req),
+      changedBy: getActorLabel(req)
+    });
+    if (!receipt) {
+      return sendJson(res, 404, { error: "Receptia nu a fost gasita." });
+    }
+    const response = sendJson(res, 200, receipt);
+    triggerCriticalManagementAlert({
+      trigger: "receipt-closed",
+      actor: getActorLabel(req)
+    });
+    return response;
+  } catch (error) {
+    console.error("Failed to close receipt:", error.message);
+    return sendJson(res, 400, { error: error.message || "Nu am putut inchide receptia." });
+  }
+}
+
+async function reopenReceiptHandler(req, res, id) {
+  try {
+    const receipt = await reopenReceipt(id, {
+      ...getBody(req),
+      changedBy: getActorLabel(req)
+    });
+    if (!receipt) {
+      return sendJson(res, 404, { error: "Receptia nu a fost gasita." });
+    }
+    const response = sendJson(res, 200, receipt);
+    triggerCriticalManagementAlert({
+      trigger: "receipt-reopened",
+      actor: getActorLabel(req)
+    });
+    return response;
+  } catch (error) {
+    console.error("Failed to reopen receipt:", error.message);
+    return sendJson(res, 400, { error: error.message || "Nu am putut redeschide receptia." });
+  }
+}
+
 module.exports = {
+  closeReceiptHandler,
   createReceiptHandler,
   healthHandler,
   listReceiptsHandler,
+  reopenReceiptHandler,
   updateReceiptStatusHandler
 };

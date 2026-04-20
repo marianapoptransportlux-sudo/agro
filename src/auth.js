@@ -2,19 +2,42 @@ const crypto = require("crypto");
 
 const SESSION_COOKIE_NAME = "agro_session";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
+const SESSION_INACTIVITY_MS = 1000 * 60 * 30;
 const LOGIN_WINDOW_MS = 1000 * 60 * 15;
 const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_BLOCK_MS = 1000 * 60 * 15;
+const PASSWORD_MIN_LENGTH = 10;
+const COMMON_WEAK_PASSWORDS = new Set([
+  "password", "parola", "parolaparola", "1234567890", "qwertyuiop",
+  "admin1234", "welcome123", "passw0rd12", "operator12", "contabil12"
+]);
 
 const sessions = new Map();
 const loginAttemptsByIp = new Map();
 const loginAttemptsByUsername = new Map();
 
-function createPasswordRecord(password) {
-  const normalizedPassword = String(password || "").trim();
-  if (!normalizedPassword) {
+function validatePasswordPolicy(password, { lenient = false } = {}) {
+  const normalized = String(password || "").trim();
+  if (!normalized) {
     throw new Error("Parola este obligatorie.");
   }
+  if (lenient) {
+    return normalized;
+  }
+  if (normalized.length < PASSWORD_MIN_LENGTH) {
+    throw new Error(`Parola trebuie sa aiba minim ${PASSWORD_MIN_LENGTH} caractere.`);
+  }
+  if (!/[A-Za-z]/.test(normalized) || !/[0-9]/.test(normalized)) {
+    throw new Error("Parola trebuie sa contina litere si cifre.");
+  }
+  if (COMMON_WEAK_PASSWORDS.has(normalized.toLowerCase())) {
+    throw new Error("Parola este prea simpla. Alege o parola mai complexa.");
+  }
+  return normalized;
+}
+
+function createPasswordRecord(password, options = {}) {
+  const normalizedPassword = validatePasswordPolicy(password, options);
 
   const salt = crypto.randomBytes(16).toString("hex");
   const hash = crypto.scryptSync(normalizedPassword, salt, 64).toString("hex");
@@ -49,7 +72,8 @@ function sanitizeUserForSession(user) {
     username: user.username,
     roleCode: user.roleCode,
     channel: user.channel,
-    active: user.active !== false
+    active: user.active !== false,
+    requirePasswordChange: user.requirePasswordChange === true
   };
 }
 
@@ -75,6 +99,10 @@ function cleanupExpiredSessions() {
   const now = Date.now();
   for (const [token, session] of sessions.entries()) {
     if (!session || session.expiresAt <= now) {
+      sessions.delete(token);
+      continue;
+    }
+    if (session.lastActivityAt && now - session.lastActivityAt > SESSION_INACTIVITY_MS) {
       sessions.delete(token);
     }
   }
@@ -112,7 +140,8 @@ function createSession(user) {
   sessions.set(token, {
     user: sanitizeUserForSession(user),
     createdAt: Date.now(),
-    expiresAt: Date.now() + SESSION_TTL_MS
+    expiresAt: Date.now() + SESSION_TTL_MS,
+    lastActivityAt: Date.now()
   });
   return token;
 }
@@ -261,7 +290,11 @@ function attachCurrentUser(req, _res, next) {
 
   if (token && sessions.has(token)) {
     const session = sessions.get(token);
-    if (session?.expiresAt > Date.now()) {
+    const now = Date.now();
+    const isExpired = session?.expiresAt <= now;
+    const isIdle = session?.lastActivityAt && now - session.lastActivityAt > SESSION_INACTIVITY_MS;
+    if (!isExpired && !isIdle) {
+      session.lastActivityAt = now;
       req.currentUser = session.user;
     } else {
       sessions.delete(token);
@@ -301,6 +334,9 @@ function getActorLabel(req) {
 
 module.exports = {
   SESSION_COOKIE_NAME,
+  SESSION_INACTIVITY_MS,
+  PASSWORD_MIN_LENGTH,
+  validatePasswordPolicy,
   attachCurrentUser,
   clearFailedLogins,
   clearFailedLoginsForUsername,

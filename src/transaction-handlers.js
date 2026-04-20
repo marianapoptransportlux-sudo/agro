@@ -1,8 +1,10 @@
 const {
+  applyAdvanceCredit,
   createTransaction,
   getConfig,
   listDeliveries,
   listOpeningDebtItems,
+  listPartnerAdvances,
   listReceipts,
   listTransactions,
   updateTransaction
@@ -181,8 +183,35 @@ async function updateTransactionHandler(req, res, id) {
   }
 }
 
+async function applyAdvanceHandler(req, res) {
+  const body = getBody(req);
+  try {
+    const transaction = await applyAdvanceCredit({
+      ...body,
+      changedBy: getActorLabel(req)
+    });
+    return sendJson(res, 201, transaction);
+  } catch (error) {
+    console.error("Failed to apply advance:", error.message);
+    return sendJson(res, 400, { error: error.message || "Nu am putut aplica avansul." });
+  }
+}
+
+async function listPartnerAdvancesHandler(req, res) {
+  const partnerId = req.query?.partnerId;
+  try {
+    const advances = await listPartnerAdvances(partnerId);
+    return sendJson(res, 200, { advances });
+  } catch (error) {
+    console.error("Failed to list advances:", error.message);
+    return sendJson(res, 500, { error: "Nu am putut incarca avansurile." });
+  }
+}
+
 module.exports = {
+  applyAdvanceHandler,
   createTransactionHandler,
+  listPartnerAdvancesHandler,
   listTransactionsHandler,
   updateTransactionHandler
 };

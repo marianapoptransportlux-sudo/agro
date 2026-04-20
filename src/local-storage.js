@@ -15,13 +15,15 @@ const defaultReceiptsState = {
   transactions: [],
   deliveries: [],
   complaints: [],
+  partnerAdvances: [],
   auditLogs: [],
-  lastId: 0
+  lastId: 0,
+  migrations: {}
 };
 
 const defaultConfigState = {
   nextIds: {
-    roles: 5,
+    roles: 6,
     users: 5,
     partners: 2,
     products: 2,
@@ -36,7 +38,8 @@ const defaultConfigState = {
     { id: 2, name: "Manager", code: "manager", permissions: "control, incasari primare" },
     { id: 3, name: "Contabil", code: "accountant", permissions: "plati, incasari, documente" },
     { id: 4, name: "Administrator sistem", code: "admin", permissions: "setup, utilizatori" },
-    { id: 5, name: "Control / conducere", code: "control", permissions: "rapoarte, audit" }
+    { id: 5, name: "Control / conducere", code: "control", permissions: "rapoarte, audit" },
+    { id: 6, name: "Contabil sef", code: "accountant-sef", permissions: "reclamatii, ajustari stoc, ajustari factura, audit" }
   ],
   users: [
     { id: 1, name: "Operator demo", username: "operator", roleCode: "operator", channel: "web", active: true },
@@ -175,6 +178,7 @@ function sanitizeUserForClient(user) {
     roleCode: user.roleCode,
     channel: user.channel,
     active: user.active !== false,
+    requirePasswordChange: user.requirePasswordChange === true,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt
   };
@@ -222,9 +226,10 @@ function ensureUserSecurityState(users = []) {
     }
 
     if (!nextUser.passwordSalt || !nextUser.passwordHash) {
-      const passwordRecord = createPasswordRecord(defaultUserPassword);
+      const passwordRecord = createPasswordRecord(defaultUserPassword, { lenient: true });
       nextUser.passwordSalt = passwordRecord.salt;
       nextUser.passwordHash = passwordRecord.hash;
+      nextUser.requirePasswordChange = true;
       changed = true;
     }
 
@@ -337,6 +342,145 @@ function requiredText(value, label) {
   }
 
   return normalized;
+}
+
+const DELIVERY_STATES = {
+  PROIECT: "Proiect",
+  CONFIRMAT: "Confirmat",
+  LIVRAT: "Livrat",
+  INCHIS: "Inchis",
+  ANULAT: "Anulat",
+  REDESCHIS: "Redeschis"
+};
+
+const DELIVERY_TRANSITIONS = {
+  Proiect: ["Confirmat", "Anulat"],
+  Confirmat: ["Livrat", "Anulat"],
+  Livrat: ["Inchis", "Redeschis"],
+  Inchis: ["Redeschis"],
+  Redeschis: ["Confirmat", "Livrat", "Inchis", "Anulat"],
+  Anulat: []
+};
+
+const RESERVED_DELIVERY_STATES = new Set(["Confirmat", "Livrat", "Inchis", "Redeschis"]);
+const PHYSICAL_DELIVERY_STATES = new Set(["Livrat", "Inchis"]);
+
+const LEGACY_DELIVERY_STATUS_MAP = {
+  Livrata: "Livrat"
+};
+
+const COMPLAINT_STATES = {
+  DESCHISA: "Deschisa",
+  ACCEPTATA: "Acceptata",
+  RESPINSA: "Respinsa",
+  INCHISA: "Inchisa"
+};
+
+const COMPLAINT_TRANSITIONS = {
+  Deschisa: ["Acceptata", "Respinsa"],
+  Acceptata: ["Inchisa"],
+  Respinsa: ["Inchisa"],
+  Inchisa: []
+};
+
+const VALID_INVOICE_ADJUSTMENT_TYPES = new Set(["adjust", "deduct-last", "invoice-minus"]);
+const STOCK_ADJUSTMENT_ROLES = new Set(["accountant-sef", "manager", "admin"]);
+const INVOICE_ADJUSTMENT_ROLES = new Set(["accountant", "accountant-sef", "manager", "admin"]);
+
+function assertDeliveryTransition(from, to) {
+  const allowed = DELIVERY_TRANSITIONS[from];
+  if (!allowed) {
+    throw new Error(`Starea curenta a livrarii nu e recunoscuta: ${from}.`);
+  }
+  if (!allowed.includes(to)) {
+    throw new Error(`Tranzitie nevalida a livrarii: ${from} -> ${to}.`);
+  }
+}
+
+function assertComplaintTransition(from, to) {
+  const allowed = COMPLAINT_TRANSITIONS[from];
+  if (!allowed) {
+    throw new Error(`Starea curenta a reclamatiei nu e recunoscuta: ${from}.`);
+  }
+  if (!allowed.includes(to)) {
+    throw new Error(`Tranzitie nevalida a reclamatiei: ${from} -> ${to}.`);
+  }
+}
+
+function sumReservedByReceipt(state, receiptId) {
+  return (state.deliveries || [])
+    .filter(
+      (item) =>
+        item.receiptId === Number(receiptId) && RESERVED_DELIVERY_STATES.has(item.status)
+    )
+    .reduce((sum, item) => sum + Number(item.plannedQuantity || item.deliveredQuantity || 0), 0);
+}
+
+function sumDeliveredByReceipt(state, receiptId) {
+  return (state.deliveries || [])
+    .filter(
+      (item) =>
+        item.receiptId === Number(receiptId) && PHYSICAL_DELIVERY_STATES.has(item.status)
+    )
+    .reduce((sum, item) => sum + Number(item.deliveredQuantity || 0), 0);
+}
+
+function computeReceiptDeliveryStatus(baseQuantity, reservedQuantity, deliveredQuantity) {
+  if (baseQuantity <= 0) {
+    return "Nelivrat";
+  }
+  if (deliveredQuantity >= baseQuantity) {
+    return "Livrat complet";
+  }
+  if (deliveredQuantity > 0) {
+    return "Livrat partial";
+  }
+  if (reservedQuantity >= baseQuantity) {
+    return "Rezervat complet";
+  }
+  if (reservedQuantity > 0) {
+    return "Rezervat partial";
+  }
+  return "Nelivrat";
+}
+
+function recalcReceiptDeliveryState(state, receiptId) {
+  const receipt = state.receipts.find((item) => item.id === Number(receiptId));
+  if (!receipt) {
+    return null;
+  }
+  const baseQuantity = Number(
+    receipt.finalNetQuantity ?? receipt.provisionalNetQuantity ?? receipt.quantity ?? 0
+  );
+  const reservedQuantity = sumReservedByReceipt(state, receipt.id);
+  const deliveredQuantity = sumDeliveredByReceipt(state, receipt.id);
+  receipt.reservedQuantity = reservedQuantity;
+  receipt.deliveredQuantity = deliveredQuantity;
+  receipt.availableQuantity = Math.max(baseQuantity - reservedQuantity, 0);
+  receipt.deliveryStatus = computeReceiptDeliveryStatus(
+    baseQuantity,
+    reservedQuantity,
+    deliveredQuantity
+  );
+  receipt.updatedAt = new Date().toISOString();
+  return receipt;
+}
+
+function recalcReceiptOpenComplaintsFlag(state, receiptId) {
+  const receipt = state.receipts.find((item) => item.id === Number(receiptId));
+  if (!receipt) {
+    return null;
+  }
+  const deliveries = (state.deliveries || []).filter(
+    (item) => item.receiptId === receipt.id
+  );
+  const deliveryIds = new Set(deliveries.map((item) => item.id));
+  receipt.hasOpenComplaint = (state.complaints || []).some(
+    (item) =>
+      deliveryIds.has(item.deliveryId) && item.status === COMPLAINT_STATES.DESCHISA
+  );
+  receipt.updatedAt = new Date().toISOString();
+  return receipt;
 }
 
 function createReceiptSummary(receipts) {
@@ -546,6 +690,32 @@ function requiredChangeReason(value) {
   return requiredText(value, "Mentiunea modificarii");
 }
 
+const SENSITIVE_FIELD_NAMES = new Set([
+  "password",
+  "passwordSalt",
+  "passwordHash",
+  "token",
+  "sessionToken",
+  "apiKey",
+  "apikey",
+  "secret"
+]);
+
+function maskSensitiveFields(value) {
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) return value.map(maskSensitiveFields);
+  if (typeof value !== "object") return value;
+  const out = {};
+  for (const key of Object.keys(value)) {
+    if (SENSITIVE_FIELD_NAMES.has(key)) {
+      out[key] = "***";
+    } else {
+      out[key] = maskSensitiveFields(value[key]);
+    }
+  }
+  return out;
+}
+
 function createAuditEntry(state, payload) {
   if (!Array.isArray(state.auditLogs)) {
     state.auditLogs = [];
@@ -558,8 +728,8 @@ function createAuditEntry(state, payload) {
     action: payload.action,
     reason: payload.reason,
     user: payload.user || "dashboard",
-    oldValue: payload.oldValue || null,
-    newValue: payload.newValue || null,
+    oldValue: maskSensitiveFields(payload.oldValue) || null,
+    newValue: maskSensitiveFields(payload.newValue) || null,
     createdAt: new Date().toISOString()
   };
 
@@ -583,11 +753,8 @@ function getReceiptAvailableQuantity(state, receiptId) {
   const baseQuantity = Number(
     receipt.finalNetQuantity ?? receipt.provisionalNetQuantity ?? receipt.quantity ?? 0
   );
-  const deliveredQuantity = (state.deliveries || [])
-    .filter((item) => item.receiptId === Number(receiptId))
-    .reduce((sum, item) => sum + Number(item.deliveredQuantity || 0), 0);
-
-  return Math.max(baseQuantity - deliveredQuantity, 0);
+  const reservedQuantity = sumReservedByReceipt(state, receipt.id);
+  return Math.max(baseQuantity - reservedQuantity, 0);
 }
 
 function filterByDate(items, dateValue) {
@@ -807,6 +974,13 @@ async function createOpeningDocument(payload) {
 
 async function createReceipt(payload) {
   const state = readReceiptsState();
+  const grossWeight = sanitizeNumber(payload.grossWeight);
+  const tareWeight = sanitizeNumber(payload.tareWeight);
+  const netWeightFromWeighing = grossWeight > 0 ? Math.max(grossWeight - tareWeight, 0) : 0;
+  const netWeight = payload.netWeight !== undefined ? sanitizeNumber(payload.netWeight) : netWeightFromWeighing;
+  if (grossWeight > 0 && grossWeight < tareWeight) {
+    throw new Error("Masa bruta nu poate fi mai mica decat tara.");
+  }
   const receipt = {
     id: state.lastId + 1,
     supplier: payload.supplier,
@@ -815,6 +989,9 @@ async function createReceipt(payload) {
     productId: payload.productId ? Number(payload.productId) : null,
     quantity: Number(payload.quantity),
     grossQuantity: Number(payload.grossQuantity ?? payload.quantity),
+    grossWeight,
+    tareWeight,
+    netWeight,
     unit: payload.unit,
     price: Number(payload.price),
     humidity: sanitizeNumber(payload.humidity),
@@ -840,6 +1017,11 @@ async function createReceipt(payload) {
     receivedBy: payload.receivedBy || "",
     location: payload.location || "",
     locationId: payload.locationId ? Number(payload.locationId) : null,
+    reservedQuantity: 0,
+    deliveredQuantity: 0,
+    availableQuantity: sanitizeNumber(payload.provisionalNetQuantity ?? payload.quantity),
+    deliveryStatus: "Nelivrat",
+    hasOpenComplaint: false,
     createdAt: new Date().toISOString()
   };
 
@@ -928,16 +1110,60 @@ async function createProcessing(payload) {
   return processing;
 }
 
+function computeTargetOutstanding(state, referenceType, refId) {
+  if (referenceType === "receipt") {
+    const receipt = state.receipts.find((item) => item.id === Number(refId));
+    if (!receipt) return null;
+    const target = Number(receipt.preliminaryPayableAmount || 0);
+    const applied = (state.transactions || [])
+      .filter((item) => item.referenceType === "receipt" && item.receiptId === receipt.id)
+      .reduce((sum, item) => sum + Number(item.appliedAmount ?? item.amount ?? 0), 0);
+    return Math.max(target - applied, 0);
+  }
+  if (referenceType === "delivery") {
+    const delivery = (state.deliveries || []).find((item) => item.id === Number(refId));
+    if (!delivery) return null;
+    const target = Number(delivery.contractPrice || 0) * Number(delivery.deliveredQuantity || 0);
+    const applied = (state.transactions || [])
+      .filter((item) => item.referenceType === "delivery" && item.deliveryId === delivery.id)
+      .reduce((sum, item) => sum + Number(item.appliedAmount ?? item.amount ?? 0), 0);
+    return Math.max(target - applied, 0);
+  }
+  if (referenceType === "opening-debt") {
+    const openingDocuments = state.openingDocuments || [];
+    const debtItem = openingDocuments
+      .flatMap((doc) => doc.debtItems || [])
+      .find((item) => item.openingDebtId === refId);
+    if (!debtItem) return null;
+    const target = Number(debtItem.amount || 0);
+    const settled = Number(debtItem.settledAmount || 0);
+    return Math.max(target - settled, 0);
+  }
+  return null;
+}
+
 async function createTransaction(payload) {
   const state = readReceiptsState();
+  const referenceType =
+    payload.referenceType === "delivery"
+      ? "delivery"
+      : payload.referenceType === "opening-debt"
+        ? "opening-debt"
+        : "receipt";
+  const refId =
+    referenceType === "receipt"
+      ? payload.receiptId
+      : referenceType === "delivery"
+        ? payload.deliveryId
+        : payload.openingDebtId;
+  const rawAmount = sanitizeNumber(payload.amount);
+  const outstanding = computeTargetOutstanding(state, referenceType, refId);
+  const appliedAmount = outstanding === null ? rawAmount : Math.min(rawAmount, outstanding);
+  const advanceAmount = outstanding === null ? 0 : Math.max(rawAmount - outstanding, 0);
+
   const transaction = {
     id: (state.transactions?.length || 0) + 1,
-    referenceType:
-      payload.referenceType === "delivery"
-        ? "delivery"
-        : payload.referenceType === "opening-debt"
-          ? "opening-debt"
-          : "receipt",
+    referenceType,
     receiptId: payload.receiptId ? Number(payload.receiptId) : null,
     deliveryId: payload.deliveryId ? Number(payload.deliveryId) : null,
     openingDebtId: payload.openingDebtId || "",
@@ -945,7 +1171,10 @@ async function createTransaction(payload) {
     partner: payload.partner,
     direction: payload.direction,
     status: payload.status || "Confirmat",
-    amount: sanitizeNumber(payload.amount),
+    amount: rawAmount,
+    appliedAmount,
+    advanceAmount,
+    source: payload.source || (advanceAmount > 0 ? "overpayment" : "payment"),
     paymentType: payload.paymentType || "",
     note: payload.note || "",
     createdAt: new Date().toISOString()
@@ -954,16 +1183,36 @@ async function createTransaction(payload) {
   if (!Array.isArray(state.transactions)) {
     state.transactions = [];
   }
+  if (!Array.isArray(state.partnerAdvances)) {
+    state.partnerAdvances = [];
+  }
 
   state.transactions.push(transaction);
 
-  if (transaction.referenceType === "receipt") {
+  if (advanceAmount > 0 && transaction.partnerId) {
+    state.partnerAdvances.push({
+      id: state.partnerAdvances.length + 1,
+      partnerId: transaction.partnerId,
+      partner: transaction.partner,
+      transactionId: transaction.id,
+      amount: advanceAmount,
+      remainingAmount: advanceAmount,
+      source: "overpayment",
+      note: transaction.note,
+      createdAt: transaction.createdAt
+    });
+  }
+
+  if (referenceType === "receipt") {
     const receipt = state.receipts.find((item) => item.id === transaction.receiptId);
     if (receipt) {
       const relatedTransactions = state.transactions.filter(
         (item) => item.referenceType === "receipt" && item.receiptId === receipt.id
       );
-      const totalPaid = relatedTransactions.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+      const totalPaid = relatedTransactions.reduce(
+        (sum, item) => sum + Number(item.appliedAmount ?? item.amount ?? 0),
+        0
+      );
       const targetAmount = Number(receipt.preliminaryPayableAmount || 0);
       receipt.paidAmount = totalPaid;
       receipt.paymentStatus =
@@ -972,14 +1221,14 @@ async function createTransaction(payload) {
     }
   }
 
-  if (transaction.referenceType === "delivery") {
+  if (referenceType === "delivery") {
     const delivery = (state.deliveries || []).find((item) => item.id === transaction.deliveryId);
     if (delivery) {
       const relatedTransactions = state.transactions.filter(
         (item) => item.referenceType === "delivery" && item.deliveryId === delivery.id
       );
       const totalCollected = relatedTransactions.reduce(
-        (sum, item) => sum + Number(item.amount || 0),
+        (sum, item) => sum + Number(item.appliedAmount ?? item.amount ?? 0),
         0
       );
       const targetAmount = Number(delivery.contractPrice || 0) * Number(delivery.deliveredQuantity || 0);
@@ -990,7 +1239,7 @@ async function createTransaction(payload) {
     }
   }
 
-  if (transaction.referenceType === "opening-debt") {
+  if (referenceType === "opening-debt") {
     const openingDocuments = state.openingDocuments || [];
     const matchedDocument = openingDocuments.find((document) =>
       (document.debtItems || []).some((item) => item.openingDebtId === transaction.openingDebtId)
@@ -1000,7 +1249,7 @@ async function createTransaction(payload) {
     );
 
     if (debtItem) {
-      debtItem.settledAmount = Number(debtItem.settledAmount || 0) + Number(transaction.amount || 0);
+      debtItem.settledAmount = Number(debtItem.settledAmount || 0) + Number(appliedAmount);
       const targetAmount = Number(debtItem.amount || 0);
       debtItem.status =
         debtItem.direction === "collection"
@@ -1021,8 +1270,122 @@ async function createTransaction(payload) {
     entityType: "transaction",
     entityId: transaction.id,
     action: "create",
-    reason: "Creare tranzactie",
+    reason: advanceAmount > 0 ? "Creare tranzactie cu avans" : "Creare tranzactie",
     user: payload.createdBy || "dashboard",
+    newValue: { ...transaction }
+  });
+
+  writeReceiptsState(state);
+  return transaction;
+}
+
+async function listPartnerAdvances(partnerId) {
+  const state = readReceiptsState();
+  const advances = state.partnerAdvances || [];
+  if (partnerId === undefined || partnerId === null) {
+    return advances;
+  }
+  return advances.filter((item) => item.partnerId === Number(partnerId));
+}
+
+async function applyAdvanceCredit(payload = {}) {
+  const state = readReceiptsState();
+  const partnerId = Number(payload.partnerId);
+  if (!Number.isFinite(partnerId) || partnerId <= 0) {
+    throw new Error("Partenerul este obligatoriu pentru aplicarea avansului.");
+  }
+  const referenceType =
+    payload.referenceType === "receipt" ? "receipt" : "delivery";
+  const refId =
+    referenceType === "receipt" ? payload.receiptId : payload.deliveryId;
+  if (!refId) {
+    throw new Error("Referinta (receiptId sau deliveryId) este obligatorie.");
+  }
+  const requestedAmount = sanitizeNumber(payload.amount);
+  if (requestedAmount <= 0) {
+    throw new Error("Suma de aplicat trebuie sa fie mai mare ca zero.");
+  }
+  const outstanding = computeTargetOutstanding(state, referenceType, refId);
+  if (outstanding === null) {
+    throw new Error("Documentul tinta pentru aplicarea avansului nu exista.");
+  }
+  const applyLimit = Math.min(requestedAmount, outstanding);
+  if (applyLimit <= 0) {
+    throw new Error("Documentul tinta nu mai are sold ramas de acoperit.");
+  }
+
+  const advances = (state.partnerAdvances || [])
+    .filter((item) => item.partnerId === partnerId && Number(item.remainingAmount) > 0)
+    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+  let consumed = 0;
+  const consumedFrom = [];
+  for (const advance of advances) {
+    if (consumed >= applyLimit) break;
+    const take = Math.min(Number(advance.remainingAmount), applyLimit - consumed);
+    advance.remainingAmount = Number(advance.remainingAmount) - take;
+    consumed += take;
+    consumedFrom.push({ advanceId: advance.id, amount: take });
+  }
+
+  if (consumed <= 0) {
+    throw new Error("Partenerul nu are avans disponibil.");
+  }
+
+  const direction = referenceType === "delivery" ? "collection" : "payment";
+  const transaction = {
+    id: (state.transactions?.length || 0) + 1,
+    referenceType,
+    receiptId: referenceType === "receipt" ? Number(refId) : null,
+    deliveryId: referenceType === "delivery" ? Number(refId) : null,
+    openingDebtId: "",
+    partnerId,
+    partner: payload.partner || advances[0]?.partner || "",
+    direction,
+    status: "Confirmat",
+    amount: consumed,
+    appliedAmount: consumed,
+    advanceAmount: 0,
+    source: "advance-applied",
+    consumedFrom,
+    paymentType: "avans",
+    note: String(payload.note || "Aplicare avans").trim(),
+    createdAt: new Date().toISOString()
+  };
+  if (!Array.isArray(state.transactions)) state.transactions = [];
+  state.transactions.push(transaction);
+
+  if (referenceType === "receipt") {
+    const receipt = state.receipts.find((item) => item.id === Number(refId));
+    if (receipt) {
+      const total = (state.transactions || [])
+        .filter((item) => item.referenceType === "receipt" && item.receiptId === receipt.id)
+        .reduce((sum, item) => sum + Number(item.appliedAmount ?? item.amount ?? 0), 0);
+      const target = Number(receipt.preliminaryPayableAmount || 0);
+      receipt.paidAmount = total;
+      receipt.paymentStatus = total <= 0 ? "Neachitat" : total < target ? "Partial" : "Achitat";
+      receipt.updatedAt = new Date().toISOString();
+    }
+  } else {
+    const delivery = (state.deliveries || []).find((item) => item.id === Number(refId));
+    if (delivery) {
+      const total = (state.transactions || [])
+        .filter((item) => item.referenceType === "delivery" && item.deliveryId === delivery.id)
+        .reduce((sum, item) => sum + Number(item.appliedAmount ?? item.amount ?? 0), 0);
+      const target = Number(delivery.contractPrice || 0) * Number(delivery.deliveredQuantity || 0);
+      delivery.collectedAmount = total;
+      delivery.collectionStatus =
+        total <= 0 ? "Neincasat" : total < target ? "Partial incasat" : "Incasat";
+      delivery.updatedAt = new Date().toISOString();
+    }
+  }
+
+  createAuditEntry(state, {
+    entityType: "transaction",
+    entityId: transaction.id,
+    action: "apply-advance",
+    reason: requiredChangeReason(payload.changeReason || "Aplicare avans existent"),
+    user: payload.changedBy || "dashboard",
     newValue: { ...transaction }
   });
 
@@ -1126,15 +1489,19 @@ async function createDelivery(payload) {
     throw new Error("Receptia selectata nu exista.");
   }
 
-  const availableQuantity = getReceiptAvailableQuantity(state, payload.receiptId);
-  const deliveredQuantity = sanitizeNumber(payload.deliveredQuantity);
-
-  if (deliveredQuantity <= 0) {
-    throw new Error("Cantitatea livrata trebuie sa fie mai mare ca zero.");
+  if (receipt.status === "Inchis") {
+    throw new Error("Nu se pot adauga livrari pe o receptie inchisa.");
   }
 
-  if (deliveredQuantity > availableQuantity) {
-    throw new Error("Cantitatea livrata depaseste stocul disponibil pentru receptie.");
+  const plannedQuantity = sanitizeNumber(payload.plannedQuantity ?? payload.deliveredQuantity);
+
+  if (plannedQuantity <= 0) {
+    throw new Error("Cantitatea planificata trebuie sa fie mai mare ca zero.");
+  }
+
+  const availableQuantity = getReceiptAvailableQuantity(state, payload.receiptId);
+  if (plannedQuantity > availableQuantity) {
+    throw new Error("Cantitatea planificata depaseste stocul disponibil pentru receptie.");
   }
 
   const delivery = {
@@ -1148,10 +1515,20 @@ async function createDelivery(payload) {
     contractNumber: payload.contractNumber || "",
     contractDate: payload.contractDate || "",
     contractPrice: sanitizeNumber(payload.contractPrice),
-    deliveredQuantity,
+    plannedQuantity,
+    deliveredQuantity: 0,
+    grossWeight: 0,
+    tareWeight: 0,
+    netWeight: 0,
     invoiceNumber: payload.invoiceNumber || "",
     note: payload.note || "",
-    status: payload.status || "Livrata",
+    status: DELIVERY_STATES.PROIECT,
+    confirmedAt: null,
+    deliveredAt: null,
+    closedAt: null,
+    canceledAt: null,
+    reopenedAt: null,
+    createdBy: payload.createdBy || "dashboard",
     createdAt: new Date().toISOString()
   };
 
@@ -1160,11 +1537,8 @@ async function createDelivery(payload) {
   }
 
   state.deliveries.push(delivery);
-  receipt.deliveredQuantity = (receipt.deliveredQuantity || 0) + deliveredQuantity;
-  receipt.availableQuantity = getReceiptAvailableQuantity(state, receipt.id);
-  receipt.deliveryStatus =
-    receipt.availableQuantity <= 0 ? "Livrat complet" : receipt.deliveredQuantity > 0 ? "Livrat partial" : "Nelivrat";
-  receipt.updatedAt = new Date().toISOString();
+  recalcReceiptDeliveryState(state, receipt.id);
+  recalcReceiptOpenComplaintsFlag(state, receipt.id);
 
   createAuditEntry(state, {
     entityType: "delivery",
@@ -1173,6 +1547,114 @@ async function createDelivery(payload) {
     reason: "Creare livrare",
     user: payload.createdBy || "dashboard",
     newValue: { ...delivery }
+  });
+
+  writeReceiptsState(state);
+  return delivery;
+}
+
+async function transitionDelivery(id, action, payload = {}) {
+  const state = readReceiptsState();
+  const delivery = (state.deliveries || []).find((item) => item.id === Number(id));
+
+  if (!delivery) {
+    return null;
+  }
+
+  const actionMap = {
+    confirm: DELIVERY_STATES.CONFIRMAT,
+    deliver: DELIVERY_STATES.LIVRAT,
+    close: DELIVERY_STATES.INCHIS,
+    cancel: DELIVERY_STATES.ANULAT,
+    reopen: DELIVERY_STATES.REDESCHIS
+  };
+
+  const nextStatus = actionMap[action];
+  if (!nextStatus) {
+    throw new Error(`Actiune necunoscuta pentru livrare: ${action}.`);
+  }
+
+  const currentStatus = delivery.status || DELIVERY_STATES.PROIECT;
+  assertDeliveryTransition(currentStatus, nextStatus);
+
+  const receipt = state.receipts.find((item) => item.id === delivery.receiptId);
+  if (receipt && receipt.status === "Inchis" && nextStatus !== DELIVERY_STATES.REDESCHIS) {
+    throw new Error("Receptia asociata este inchisa. Redeschideti receptia pentru a modifica livrarea.");
+  }
+
+  const reason = action === "cancel" || action === "reopen" || action === "close"
+    ? requiredChangeReason(payload.changeReason)
+    : requiredText(payload.changeReason || "Tranzitie livrare", "Mentiunea modificarii");
+
+  const oldValue = {
+    status: currentStatus,
+    deliveredQuantity: delivery.deliveredQuantity,
+    grossWeight: delivery.grossWeight,
+    tareWeight: delivery.tareWeight,
+    netWeight: delivery.netWeight
+  };
+
+  const now = new Date().toISOString();
+
+  if (nextStatus === DELIVERY_STATES.LIVRAT) {
+    const grossWeight = sanitizeNumber(payload.grossWeight ?? delivery.grossWeight);
+    const tareWeight = sanitizeNumber(payload.tareWeight ?? delivery.tareWeight);
+    if (grossWeight <= 0) {
+      throw new Error("Masa bruta reala este obligatorie la livrare.");
+    }
+    if (grossWeight < tareWeight) {
+      throw new Error("Masa bruta nu poate fi mai mica decat tara.");
+    }
+    const netWeight = Math.max(grossWeight - tareWeight, 0);
+    if (netWeight <= 0) {
+      throw new Error("Masa neta rezultata la livrare trebuie sa fie mai mare ca zero.");
+    }
+    delivery.grossWeight = grossWeight;
+    delivery.tareWeight = tareWeight;
+    delivery.netWeight = netWeight;
+    delivery.deliveredQuantity = netWeight;
+    delivery.deliveredAt = now;
+  }
+
+  if (nextStatus === DELIVERY_STATES.CONFIRMAT) {
+    delivery.confirmedAt = delivery.confirmedAt || now;
+  }
+
+  if (nextStatus === DELIVERY_STATES.INCHIS) {
+    delivery.closedAt = now;
+  }
+
+  if (nextStatus === DELIVERY_STATES.ANULAT) {
+    delivery.canceledAt = now;
+  }
+
+  if (nextStatus === DELIVERY_STATES.REDESCHIS) {
+    delivery.reopenedAt = now;
+  }
+
+  delivery.status = nextStatus;
+  delivery.updatedAt = now;
+  delivery.changedBy = payload.changedBy || delivery.changedBy || "dashboard";
+
+  if (receipt) {
+    recalcReceiptDeliveryState(state, receipt.id);
+    recalcReceiptOpenComplaintsFlag(state, receipt.id);
+  }
+
+  createAuditEntry(state, {
+    entityType: "delivery",
+    entityId: delivery.id,
+    action: `transition:${action}`,
+    reason,
+    user: payload.changedBy || "dashboard",
+    oldValue,
+    newValue: {
+      status: delivery.status,
+      deliveredQuantity: delivery.deliveredQuantity,
+      grossWeight: delivery.grossWeight,
+      tareWeight: delivery.tareWeight,
+      netWeight: delivery.netWeight
+    }
   });
 
   writeReceiptsState(state);
@@ -1208,12 +1690,8 @@ async function createComplaint(payload) {
   delivery.complaintStatus = complaint.status;
   delivery.updatedAt = new Date().toISOString();
 
-  const receipt = state.receipts.find((item) => item.id === delivery.receiptId);
-  if (receipt) {
-    receipt.hasOpenComplaint = (state.complaints || []).some(
-      (item) => item.deliveryId === delivery.id && item.status === "Deschisa"
-    );
-    receipt.updatedAt = new Date().toISOString();
+  if (delivery.receiptId) {
+    recalcReceiptOpenComplaintsFlag(state, delivery.receiptId);
   }
 
   createAuditEntry(state, {
@@ -1237,12 +1715,14 @@ async function updateDelivery(id, payload = {}) {
     return null;
   }
 
-  const reason = requiredChangeReason(payload.changeReason);
-  const oldValue = { status: delivery.status, note: delivery.note, invoiceNumber: delivery.invoiceNumber };
-
   if (payload.status !== undefined) {
-    delivery.status = requiredText(payload.status, "Status livrare");
+    throw new Error(
+      "Statusul livrarii se schimba prin endpointul de tranzitie, nu prin PATCH generic."
+    );
   }
+
+  const reason = requiredChangeReason(payload.changeReason);
+  const oldValue = { note: delivery.note, invoiceNumber: delivery.invoiceNumber };
 
   if (payload.note !== undefined) {
     delivery.note = String(payload.note || "").trim();
@@ -1262,7 +1742,6 @@ async function updateDelivery(id, payload = {}) {
     user: payload.changedBy || "dashboard",
     oldValue,
     newValue: {
-      status: delivery.status,
       note: delivery.note,
       invoiceNumber: delivery.invoiceNumber
     }
@@ -1280,6 +1759,26 @@ async function updateComplaint(id, payload = {}) {
     return null;
   }
 
+  const currentUserRole = String(payload.currentUserRole || "").trim();
+  const wantsStockCorrection = payload.stockCorrection !== undefined && payload.stockCorrection !== null;
+  const wantsInvoiceAdjustment = payload.invoiceAdjustment !== undefined && payload.invoiceAdjustment !== null;
+
+  if (wantsStockCorrection && currentUserRole && !STOCK_ADJUSTMENT_ROLES.has(currentUserRole)) {
+    const error = new Error(
+      "Doar contabilul-sef, managerul sau administratorul poate aplica o corectie de stoc."
+    );
+    error.statusCode = 403;
+    throw error;
+  }
+
+  if (wantsInvoiceAdjustment && currentUserRole && !INVOICE_ADJUSTMENT_ROLES.has(currentUserRole)) {
+    const error = new Error(
+      "Rolul curent nu are dreptul de a aplica ajustari de factura."
+    );
+    error.statusCode = 403;
+    throw error;
+  }
+
   const reason = requiredChangeReason(payload.changeReason);
   const oldValue = {
     status: complaint.status,
@@ -1287,8 +1786,82 @@ async function updateComplaint(id, payload = {}) {
     note: complaint.note
   };
 
+  let transitionTo = null;
   if (payload.status !== undefined) {
-    complaint.status = requiredText(payload.status, "Status reclamatie");
+    const requested = requiredText(payload.status, "Status reclamatie");
+    if (requested !== complaint.status) {
+      assertComplaintTransition(complaint.status || COMPLAINT_STATES.DESCHISA, requested);
+    }
+    transitionTo = requested;
+  }
+
+  let stockDelta = null;
+  if (wantsStockCorrection) {
+    const stock = payload.stockCorrection;
+    const targetDeliveryId = Number(stock.deliveryId || complaint.deliveryId);
+    const delta = sanitizeNumber(stock.deltaQuantity);
+    if (delta === 0) {
+      throw new Error("Delta cantitatii pentru corectia de stoc nu poate fi zero.");
+    }
+    const delivery = (state.deliveries || []).find((item) => item.id === targetDeliveryId);
+    if (!delivery) {
+      throw new Error("Livrarea tinta a corectiei de stoc nu exista.");
+    }
+    const projected = Number(delivery.deliveredQuantity || 0) + delta;
+    if (projected < 0) {
+      throw new Error("Corectia ar face cantitatea livrata negativa.");
+    }
+    delivery.deliveredQuantity = projected;
+    if (delivery.netWeight !== undefined) {
+      delivery.netWeight = projected;
+    }
+    delivery.updatedAt = new Date().toISOString();
+    stockDelta = { deliveryId: delivery.id, delta, note: String(stock.note || "").trim() };
+    complaint.stockCorrection = {
+      deliveryId: delivery.id,
+      deltaQuantity: delta,
+      note: stockDelta.note,
+      appliedAt: new Date().toISOString(),
+      appliedBy: payload.changedBy || "dashboard"
+    };
+    if (delivery.receiptId) {
+      recalcReceiptDeliveryState(state, delivery.receiptId);
+    }
+  }
+
+  let invoiceAdjustment = null;
+  if (wantsInvoiceAdjustment) {
+    const adj = payload.invoiceAdjustment;
+    if (!VALID_INVOICE_ADJUSTMENT_TYPES.has(String(adj.type || ""))) {
+      throw new Error(
+        "Tipul ajustarii de factura trebuie sa fie: adjust, deduct-last sau invoice-minus."
+      );
+    }
+    const amount = sanitizeNumber(adj.amount);
+    if (amount === 0) {
+      throw new Error("Suma ajustarii de factura nu poate fi zero.");
+    }
+    invoiceAdjustment = {
+      type: String(adj.type),
+      amount,
+      invoiceRef: String(adj.invoiceRef || "").trim(),
+      note: String(adj.note || "").trim(),
+      appliedAt: new Date().toISOString(),
+      appliedBy: payload.changedBy || "dashboard"
+    };
+    complaint.invoiceAdjustment = invoiceAdjustment;
+  }
+
+  if (transitionTo) {
+    complaint.status = transitionTo;
+    if (transitionTo === COMPLAINT_STATES.ACCEPTATA) {
+      complaint.acceptedAt = new Date().toISOString();
+      complaint.acceptedBy = payload.changedBy || "dashboard";
+    }
+    if (transitionTo === COMPLAINT_STATES.INCHISA) {
+      complaint.closedAt = new Date().toISOString();
+      complaint.closedBy = payload.changedBy || "dashboard";
+    }
   }
 
   if (payload.resolutionType !== undefined) {
@@ -1307,6 +1880,10 @@ async function updateComplaint(id, payload = {}) {
     delivery.updatedAt = new Date().toISOString();
   }
 
+  if (delivery && delivery.receiptId) {
+    recalcReceiptOpenComplaintsFlag(state, delivery.receiptId);
+  }
+
   createAuditEntry(state, {
     entityType: "complaint",
     entityId: complaint.id,
@@ -1317,7 +1894,9 @@ async function updateComplaint(id, payload = {}) {
     newValue: {
       status: complaint.status,
       resolutionType: complaint.resolutionType,
-      note: complaint.note
+      note: complaint.note,
+      stockDelta,
+      invoiceAdjustment
     }
   });
 
@@ -1347,6 +1926,12 @@ async function updateReceiptStatusWithAudit(id, status, payload = {}) {
     return null;
   }
 
+  if (receipt.status === "Inchis" && status !== "Redeschis") {
+    throw new Error(
+      "Receptia este inchisa. Folositi reopenReceipt pentru a o redeschide."
+    );
+  }
+
   const reason = requiredChangeReason(payload.changeReason);
   const oldValue = { status: receipt.status };
 
@@ -1361,6 +1946,89 @@ async function updateReceiptStatusWithAudit(id, status, payload = {}) {
     user: payload.changedBy || "dashboard",
     oldValue,
     newValue: { status: receipt.status }
+  });
+
+  writeReceiptsState(state);
+  return receipt;
+}
+
+async function closeReceipt(id, payload = {}) {
+  const state = readReceiptsState();
+  const receipt = state.receipts.find((item) => item.id === Number(id));
+
+  if (!receipt) {
+    return null;
+  }
+
+  if (receipt.status === "Inchis") {
+    return receipt;
+  }
+
+  if (receipt.status !== "Procesata") {
+    throw new Error(
+      "Receptia se poate inchide doar dupa finalizarea procesarii (status Procesata)."
+    );
+  }
+
+  recalcReceiptOpenComplaintsFlag(state, receipt.id);
+  if (receipt.hasOpenComplaint) {
+    throw new Error(
+      "Receptia nu poate fi inchisa cat timp exista reclamatie deschisa."
+    );
+  }
+
+  const reason = requiredChangeReason(payload.changeReason);
+  const oldValue = { status: receipt.status };
+  const now = new Date().toISOString();
+
+  receipt.status = "Inchis";
+  receipt.closedAt = now;
+  receipt.closedBy = payload.changedBy || "dashboard";
+  receipt.updatedAt = now;
+
+  createAuditEntry(state, {
+    entityType: "receipt",
+    entityId: receipt.id,
+    action: "close",
+    reason,
+    user: payload.changedBy || "dashboard",
+    oldValue,
+    newValue: { status: receipt.status, closedAt: receipt.closedAt }
+  });
+
+  writeReceiptsState(state);
+  return receipt;
+}
+
+async function reopenReceipt(id, payload = {}) {
+  const state = readReceiptsState();
+  const receipt = state.receipts.find((item) => item.id === Number(id));
+
+  if (!receipt) {
+    return null;
+  }
+
+  if (receipt.status !== "Inchis") {
+    throw new Error("Receptia nu este inchisa, deci nu poate fi redeschisa.");
+  }
+
+  const reason = requiredChangeReason(payload.changeReason);
+  const oldValue = { status: receipt.status };
+  const now = new Date().toISOString();
+
+  receipt.status = "Redeschis";
+  receipt.reopenedAt = now;
+  receipt.reopenedBy = payload.changedBy || "dashboard";
+  receipt.updatedAt = now;
+
+  createAuditEntry(state, {
+    entityType: "receipt",
+    entityId: receipt.id,
+    action: "reopen",
+    reason,
+    user: payload.changedBy || "dashboard",
+    oldValue,
+    newValue: { status: receipt.status, reopenedAt: receipt.reopenedAt }
   });
 
   writeReceiptsState(state);
@@ -1428,14 +2096,10 @@ async function updateUserPasswordById(userId, password) {
     return null;
   }
 
-  const normalizedPassword = String(password || "").trim();
-  if (!normalizedPassword) {
-    throw new Error("Parola noua este obligatorie.");
-  }
-
-  const passwordRecord = createPasswordRecord(normalizedPassword);
+  const passwordRecord = createPasswordRecord(password);
   user.passwordSalt = passwordRecord.salt;
   user.passwordHash = passwordRecord.hash;
+  user.requirePasswordChange = false;
   user.updatedAt = new Date().toISOString();
   writeConfigState(state);
   return sanitizeUserForClient(user);
@@ -1615,6 +2279,142 @@ async function updateSystemSettings(payload) {
   return state.systemSettings;
 }
 
+const TRANSA_B_MIGRATION_KEY = "transa-b-v1";
+
+function runTransaBMigration() {
+  try {
+    ensureStorage();
+  } catch (_err) {
+    return { skipped: true, reason: "storage-unavailable" };
+  }
+
+  const state = readReceiptsState();
+  if (!state.migrations) state.migrations = {};
+  if (state.migrations[TRANSA_B_MIGRATION_KEY]) {
+    return { skipped: true, reason: "already-applied" };
+  }
+
+  const summary = {
+    deliveriesRemapped: 0,
+    receiptsBackfilled: 0,
+    receiptsOpenComplaintFlag: 0,
+    transactionsBackfilled: 0,
+    rolesAdded: 0
+  };
+
+  if (!Array.isArray(state.partnerAdvances)) {
+    state.partnerAdvances = [];
+  }
+
+  for (const delivery of state.deliveries || []) {
+    const legacy = LEGACY_DELIVERY_STATUS_MAP[delivery.status];
+    if (legacy) {
+      delivery.status = legacy;
+      summary.deliveriesRemapped++;
+    }
+    if (!delivery.status) {
+      delivery.status = DELIVERY_STATES.LIVRAT;
+      summary.deliveriesRemapped++;
+    }
+    if (delivery.grossWeight === undefined) delivery.grossWeight = 0;
+    if (delivery.tareWeight === undefined) delivery.tareWeight = 0;
+    if (delivery.netWeight === undefined) {
+      delivery.netWeight = Number(delivery.deliveredQuantity || 0);
+    }
+    if (delivery.plannedQuantity === undefined) {
+      delivery.plannedQuantity = Number(delivery.deliveredQuantity || 0);
+    }
+  }
+
+  for (const receipt of state.receipts || []) {
+    let changed = false;
+    if (receipt.reservedQuantity === undefined) {
+      receipt.reservedQuantity = Number(receipt.deliveredQuantity || 0);
+      changed = true;
+    }
+    if (receipt.availableQuantity === undefined) {
+      const base = Number(
+        receipt.finalNetQuantity ?? receipt.provisionalNetQuantity ?? receipt.quantity ?? 0
+      );
+      receipt.availableQuantity = Math.max(base - Number(receipt.reservedQuantity || 0), 0);
+      changed = true;
+    }
+    if (receipt.hasOpenComplaint === undefined) {
+      recalcReceiptOpenComplaintsFlag(state, receipt.id);
+      summary.receiptsOpenComplaintFlag++;
+    }
+    if (receipt.grossWeight === undefined) receipt.grossWeight = 0;
+    if (receipt.tareWeight === undefined) receipt.tareWeight = 0;
+    if (receipt.netWeight === undefined) {
+      receipt.netWeight = Number(receipt.finalNetQuantity ?? receipt.provisionalNetQuantity ?? 0);
+    }
+    if (changed) summary.receiptsBackfilled++;
+  }
+
+  for (const tx of state.transactions || []) {
+    if (tx.appliedAmount === undefined) {
+      tx.appliedAmount = Number(tx.amount || 0);
+      tx.advanceAmount = 0;
+      summary.transactionsBackfilled++;
+    }
+  }
+
+  state.migrations[TRANSA_B_MIGRATION_KEY] = {
+    appliedAt: new Date().toISOString(),
+    summary
+  };
+
+  const hasChanges =
+    summary.deliveriesRemapped +
+      summary.receiptsBackfilled +
+      summary.receiptsOpenComplaintFlag +
+      summary.transactionsBackfilled >
+    0;
+
+  if (hasChanges) {
+    createAuditEntry(state, {
+      entityType: "migration",
+      entityId: null,
+      action: "backfill",
+      reason: `Tranșa B v1: ${JSON.stringify(summary)}`,
+      user: "system",
+      newValue: summary
+    });
+    writeReceiptsState(state);
+  }
+
+  try {
+    const configState = readConfigState();
+    const hasAccountantSef = configState.roles.some((role) => role.code === "accountant-sef");
+    if (!hasAccountantSef) {
+      const nextId = Math.max(
+        Number(configState.nextIds.roles || 0),
+        ...configState.roles.map((role) => Number(role.id || 0))
+      ) + 1;
+      configState.roles.push({
+        id: nextId,
+        name: "Contabil sef",
+        code: "accountant-sef",
+        permissions: "reclamatii, ajustari stoc, ajustari factura, audit",
+        createdAt: new Date().toISOString()
+      });
+      configState.nextIds.roles = nextId;
+      writeConfigState(configState);
+      summary.rolesAdded = 1;
+    }
+  } catch (err) {
+    console.error("Migration: unable to ensure accountant-sef role:", err.message);
+  }
+
+  return { applied: true, summary };
+}
+
+try {
+  runTransaBMigration();
+} catch (err) {
+  console.error("Tranșa B migration failed:", err.message);
+}
+
 module.exports = {
   createConfigEntry,
   createComplaint,
@@ -1634,9 +2434,14 @@ module.exports = {
   listDeliveries,
   listOpeningDebtItems,
   listOpeningDocuments,
+  listPartnerAdvances,
   listProcessings,
   listReceipts,
   listTransactions,
+  applyAdvanceCredit,
+  closeReceipt,
+  reopenReceipt,
+  transitionDelivery,
   updateComplaint,
   updateConfigEntry,
   updateDelivery,
@@ -1645,5 +2450,6 @@ module.exports = {
   updateReceiptStatusWithAudit,
   updateTransaction,
   updateUserPasswordById,
-  updateSystemSettings
+  updateSystemSettings,
+  runTransaBMigration
 };

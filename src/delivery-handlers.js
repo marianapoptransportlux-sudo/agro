@@ -3,6 +3,7 @@ const {
   getConfig,
   listDeliveries,
   listReceipts,
+  transitionDelivery,
   updateDelivery
 } = require("./storage");
 const { getActorLabel } = require("./auth");
@@ -96,8 +97,34 @@ async function updateDeliveryHandler(req, res, id) {
   }
 }
 
+function transitionDeliveryHandler(action) {
+  return async function (req, res, id) {
+    try {
+      const delivery = await transitionDelivery(id, action, {
+        ...getBody(req),
+        changedBy: getActorLabel(req)
+      });
+
+      if (!delivery) {
+        return sendJson(res, 404, { error: "Livrarea nu a fost gasita." });
+      }
+
+      const response = sendJson(res, 200, delivery);
+      triggerCriticalManagementAlert({
+        trigger: `delivery-${action}`,
+        actor: getActorLabel(req)
+      });
+      return response;
+    } catch (error) {
+      console.error(`Failed to transition delivery (${action}):`, error.message);
+      return sendJson(res, 400, { error: error.message || "Nu am putut tranzitiona livrarea." });
+    }
+  };
+}
+
 module.exports = {
   createDeliveryHandler,
   listDeliveriesHandler,
+  transitionDeliveryHandler,
   updateDeliveryHandler
 };
