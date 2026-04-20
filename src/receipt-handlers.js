@@ -23,7 +23,69 @@ function getBody(req) {
   return req.body || {};
 }
 
-function computeReceiptEstimate({ quantity, price, humidity, impurity, product, tariffs, fiscalProfile }) {
+function findTariffValue({ tariffs, service, productName, partnerName, fiscalProfileName, referenceDate }) {
+  const normalizedService = String(service || "").trim().toLowerCase();
+  const normalizedProduct = String(productName || "").trim().toLowerCase();
+  const normalizedPartner = String(partnerName || "").trim().toLowerCase();
+  const normalizedFiscal = String(fiscalProfileName || "").trim().toLowerCase();
+  const referenceDay = String(referenceDate || new Date().toISOString().slice(0, 10));
+
+  const eligible = (tariffs || []).filter((item) => {
+    if (!item || item.active === false) {
+      return false;
+    }
+
+    if (String(item.service || "").trim().toLowerCase() !== normalizedService) {
+      return false;
+    }
+
+    if (item.validFrom && String(item.validFrom) > referenceDay) {
+      return false;
+    }
+
+    return true;
+  });
+
+  const matches = (tariffField, normalizedValue) => {
+    const normalized = String(tariffField || "").trim().toLowerCase();
+    return normalized === normalizedValue || normalized === "general" || normalized === "";
+  };
+
+  const scoreOf = (item) => {
+    let score = 0;
+    const product = String(item.product || "").trim().toLowerCase();
+    const partner = String(item.partner || "").trim().toLowerCase();
+    const fiscal = String(item.fiscalProfile || "").trim().toLowerCase();
+
+    if (product && product !== "general" && product === normalizedProduct) score += 4;
+    if (partner && partner !== "general" && partner === normalizedPartner) score += 2;
+    if (fiscal && fiscal !== "general" && fiscal === normalizedFiscal) score += 1;
+    return score;
+  };
+
+  const filtered = eligible.filter(
+    (item) =>
+      matches(item.product, normalizedProduct) &&
+      matches(item.partner, normalizedPartner) &&
+      matches(item.fiscalProfile, normalizedFiscal)
+  );
+
+  if (!filtered.length) {
+    return 0;
+  }
+
+  filtered.sort((left, right) => {
+    const scoreDiff = scoreOf(right) - scoreOf(left);
+    if (scoreDiff !== 0) {
+      return scoreDiff;
+    }
+    return String(right.validFrom || "").localeCompare(String(left.validFrom || ""));
+  });
+
+  return Number(filtered[0].value || 0);
+}
+
+function computeReceiptEstimate({ quantity, price, humidity, impurity, product, tariffs, fiscalProfile, partner, referenceDate }) {
   const grossQuantity = Number(quantity);
   const unitPrice = Number(price);
   const humidityNorm = Number(product.humidityNorm || 0);
@@ -39,10 +101,15 @@ function computeReceiptEstimate({ quantity, price, humidity, impurity, product, 
     0
   );
 
-  const cleaningTariff =
-    tariffs.find((item) => item.service.toLowerCase() === "curatire" && item.active)?.value || 0;
-  const dryingTariff =
-    tariffs.find((item) => item.service.toLowerCase() === "uscare" && item.active)?.value || 0;
+  const tariffLookup = {
+    tariffs,
+    productName: product?.name,
+    partnerName: partner?.name,
+    fiscalProfileName: fiscalProfile?.name,
+    referenceDate
+  };
+  const cleaningTariff = findTariffValue({ ...tariffLookup, service: "curatire" });
+  const dryingTariff = findTariffValue({ ...tariffLookup, service: "uscare" });
 
   const cleaningServiceTotal = grossQuantity * Number(cleaningTariff || 0);
   const dryingServiceTotal = grossQuantity * excessHumidity * Number(dryingTariff || 0);
@@ -166,8 +233,10 @@ async function createReceiptHandler(req, res) {
       humidity: normalizedHumidity,
       impurity: normalizedImpurity,
       product,
+      partner,
       tariffs: config.tariffs,
-      fiscalProfile
+      fiscalProfile,
+      referenceDate: new Date().toISOString().slice(0, 10)
     });
 
     const receipt = await createReceipt({

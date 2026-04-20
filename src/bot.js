@@ -1,4 +1,7 @@
+const fs = require("fs");
+const path = require("path");
 const { Markup, Telegraf } = require("telegraf");
+const { writeJsonAtomic } = require("./atomic-write");
 const {
   appendAuditLog,
   createReceipt,
@@ -25,7 +28,57 @@ const {
   getManagementSnapshot
 } = require("./management-report");
 
-const sessions = new Map();
+const botSessionsFile = path.join(process.cwd(), ".runtime-data", "bot-sessions.json");
+const BOT_SESSION_TTL_MS = 1000 * 60 * 60 * 6;
+
+function loadBotSessions() {
+  try {
+    if (!fs.existsSync(botSessionsFile)) {
+      return new Map();
+    }
+    const raw = fs.readFileSync(botSessionsFile, "utf8");
+    const parsed = JSON.parse(raw);
+    const now = Date.now();
+    const entries = Object.entries(parsed || {}).filter(([, session]) => {
+      const updatedAt = Number(session?.updatedAt || 0);
+      return updatedAt && now - updatedAt < BOT_SESSION_TTL_MS;
+    });
+    return new Map(entries);
+  } catch (error) {
+    console.error("Failed to load persisted bot sessions:", error.message);
+    return new Map();
+  }
+}
+
+function persistBotSessions() {
+  try {
+    const dir = path.dirname(botSessionsFile);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const payload = Object.fromEntries(sessions.entries());
+    writeJsonAtomic(botSessionsFile, payload);
+  } catch (error) {
+    console.error("Failed to persist bot sessions:", error.message);
+  }
+}
+
+function setBotSession(chatId, session) {
+  const stamped = { ...session, updatedAt: Date.now() };
+  sessions.set(chatId, stamped);
+  persistBotSessions();
+  return stamped;
+}
+
+function deleteBotSession(chatId) {
+  const deleted = sessions.delete(chatId);
+  if (deleted) {
+    persistBotSessions();
+  }
+  return deleted;
+}
+
+const sessions = loadBotSessions();
 let activeBot = null;
 
 const steps = [
@@ -488,12 +541,12 @@ function startBot(token) {
   bot.command("ajutor", (ctx) => ctx.reply(createHelpMessage()));
 
   bot.command("anuleaza", (ctx) => {
-    sessions.delete(ctx.chat.id);
+    deleteBotSession(ctx.chat.id);
     return ctx.reply("Fluxul a fost anulat.");
   });
 
   bot.command("receptie", (ctx) => {
-    sessions.set(ctx.chat.id, {
+    setBotSession(ctx.chat.id, {
       stepIndex: 0,
       payload: {},
       receivedBy: ctx.from?.username || ctx.from?.first_name || "telegram-user"
@@ -661,6 +714,7 @@ function startBot(token) {
     const currentStep = steps[session.stepIndex];
     session.payload[currentStep.key] = ctx.message.text === "-" ? "" : ctx.message.text;
     session.stepIndex += 1;
+    setBotSession(ctx.chat.id, session);
 
     if (session.stepIndex >= steps.length) {
       try {
@@ -671,7 +725,7 @@ function startBot(token) {
           status: "Noua"
         });
 
-        sessions.delete(ctx.chat.id);
+        deleteBotSession(ctx.chat.id);
         return ctx.reply(createReceiptMessage(receipt));
       } catch (error) {
         console.error("Failed to save Telegram receipt:", error.message);

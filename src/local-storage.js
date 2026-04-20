@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { createPasswordRecord } = require("./auth");
 const { backupRuntimeData } = require("./runtime-backup");
+const { writeJsonAtomic } = require("./atomic-write");
 
 const dataDir = path.join(process.cwd(), ".runtime-data");
 const legacyDataDir = path.join(process.cwd(), "data");
@@ -267,7 +268,7 @@ function readJson(file, fallback) {
 function writeJson(file, state) {
   ensureStorage();
   backupRuntimeData();
-  fs.writeFileSync(file, JSON.stringify(state, null, 2), "utf8");
+  writeJsonAtomic(file, state);
 }
 
 function readReceiptsState() {
@@ -884,14 +885,46 @@ async function listAuditLogs() {
 
 async function createProcessing(payload) {
   const state = readReceiptsState();
+  const receiptId = Number(payload.receiptId);
+  const sourceReceipt = state.receipts.find((item) => item.id === receiptId);
+  if (!sourceReceipt) {
+    throw new Error("Receptia sursa pentru procesare nu exista.");
+  }
+
+  const processedQuantity = sanitizeNumber(payload.processedQuantity);
+  const confirmedWaste = sanitizeNumber(payload.confirmedWaste);
+  const sourceQuantity = Number(
+    sourceReceipt.provisionalNetQuantity ?? sourceReceipt.quantity ?? 0
+  );
+
+  if (processedQuantity < 0) {
+    throw new Error("Cantitatea procesata nu poate fi negativa.");
+  }
+
+  if (confirmedWaste < 0) {
+    throw new Error("Cantitatea de rebut nu poate fi negativa.");
+  }
+
+  if (confirmedWaste > sourceQuantity) {
+    throw new Error(
+      "Cantitatea de rebut depaseste cantitatea sursa a receptiei."
+    );
+  }
+
+  if (processedQuantity + confirmedWaste > sourceQuantity) {
+    throw new Error(
+      "Cantitatea procesata plus rebutul depasesc cantitatea sursa a receptiei."
+    );
+  }
+
   const processing = {
     id: (state.processings?.length || 0) + 1,
-    receiptId: Number(payload.receiptId),
+    receiptId,
     product: payload.product,
     sourceLocation: payload.sourceLocation || "",
     processingType: payload.processingType,
-    processedQuantity: sanitizeNumber(payload.processedQuantity),
-    confirmedWaste: sanitizeNumber(payload.confirmedWaste),
+    processedQuantity,
+    confirmedWaste,
     finalHumidity: sanitizeNumber(payload.finalHumidity),
     finalNetQuantity: sanitizeNumber(payload.finalNetQuantity),
     operator: payload.operator || "",
@@ -906,14 +939,11 @@ async function createProcessing(payload) {
 
   state.processings.push(processing);
 
-  const receipt = state.receipts.find((item) => item.id === processing.receiptId);
-  if (receipt) {
-    receipt.status = "Procesata";
-    receipt.confirmedWaste = processing.confirmedWaste;
-    receipt.finalHumidity = processing.finalHumidity;
-    receipt.finalNetQuantity = processing.finalNetQuantity;
-    receipt.updatedAt = new Date().toISOString();
-  }
+  sourceReceipt.status = "Procesata";
+  sourceReceipt.confirmedWaste = processing.confirmedWaste;
+  sourceReceipt.finalHumidity = processing.finalHumidity;
+  sourceReceipt.finalNetQuantity = processing.finalNetQuantity;
+  sourceReceipt.updatedAt = new Date().toISOString();
 
   createAuditEntry(state, {
     entityType: "processing",
@@ -1515,6 +1545,18 @@ async function createConfigEntry(entity, payload) {
   state.nextIds[entity] = entry.id;
   state[entity].push(entry);
   writeConfigState(state);
+
+  const receiptsState = readReceiptsState();
+  createAuditEntry(receiptsState, {
+    entityType: entity,
+    entityId: entry.id,
+    action: "config-create",
+    reason: `Creare ${entity}`,
+    user: String(payload.createdBy || payload.changedBy || "dashboard").trim() || "dashboard",
+    newValue: entity === "users" ? sanitizeUserForClient(entry) : { ...entry }
+  });
+  writeReceiptsState(receiptsState);
+
   return entity === "users" ? sanitizeUserForClient(entry) : entry;
 }
 
