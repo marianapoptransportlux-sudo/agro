@@ -158,82 +158,6 @@ const currency = new Intl.NumberFormat("ro-RO", {
   maximumFractionDigits: 2
 });
 
-const roleAccessMap = {
-  operator: new Set([
-    "receipts-read",
-    "receipt-write",
-    "processings-read",
-    "processing-write",
-    "stocks-read",
-    "deliveries-read",
-    "delivery-write",
-    "complaints-read",
-    "complaint-write",
-    "config-read"
-  ]),
-  manager: new Set([
-    "receipts-read",
-    "receipt-write",
-    "processings-read",
-    "processing-write",
-    "stocks-read",
-    "deliveries-read",
-    "delivery-write",
-    "complaints-read",
-    "complaint-write",
-    "finance",
-    "finance-write",
-    "opening",
-    "reports",
-    "audit",
-    "config-read"
-  ]),
-  accountant: new Set([
-    "receipts-read",
-    "processings-read",
-    "stocks-read",
-    "deliveries-read",
-    "complaints-read",
-    "complaint-write",
-    "finance",
-    "finance-write",
-    "opening",
-    "reports",
-    "config-read"
-  ]),
-  admin: new Set([
-    "receipts-read",
-    "receipt-write",
-    "processings-read",
-    "processing-write",
-    "stocks-read",
-    "deliveries-read",
-    "delivery-write",
-    "complaints-read",
-    "complaint-write",
-    "finance",
-    "finance-write",
-    "opening",
-    "reports",
-    "audit",
-    "security-admin",
-    "setup",
-    "config-read"
-  ]),
-  control: new Set([
-    "receipts-read",
-    "processings-read",
-    "stocks-read",
-    "deliveries-read",
-    "complaints-read",
-    "finance",
-    "opening",
-    "reports",
-    "audit",
-    "config-read"
-  ])
-};
-
 function formatNumber(value) {
   return new Intl.NumberFormat("ro-RO", {
     maximumFractionDigits: 2
@@ -243,7 +167,7 @@ function formatNumber(value) {
 function setCurrentUser(user) {
   currentSessionUser = user || null;
   currentUserNameEl.textContent = currentSessionUser?.name || "-";
-  currentUserRoleEl.textContent = currentSessionUser?.roleCode || "-";
+  currentUserRoleEl.textContent = currentSessionUser?.roleName || currentSessionUser?.roleCode || "-";
 }
 
 function canAccess(capability) {
@@ -251,7 +175,7 @@ function canAccess(capability) {
     return false;
   }
 
-  return roleAccessMap[currentSessionUser.roleCode]?.has(capability) || false;
+  return Array.isArray(currentSessionUser.permissions) && currentSessionUser.permissions.includes(capability);
 }
 
 function applyRoleAccess() {
@@ -1309,9 +1233,9 @@ function getItemDetails(entity, item) {
     case "tariffs":
       return `${item.product} | ${item.calculation} | valabil din ${item.validFrom} | ${item.active ? "activ" : "inactiv"}`;
     case "roles":
-      return `${item.code} | ${item.permissions}`;
+      return `${item.code} | ${item.permissions}${item.system ? " | sistem" : ""}`;
     case "users":
-      return `${item.username || "-"} | ${item.roleCode} | ${item.channel} | ${item.active === false ? "inactiv" : "activ"}`;
+      return `${item.username || "-"} | ${item.roleName || item.roleCode} | ${item.channel} | ${item.active === false ? "inactiv" : "activ"}`;
     case "paymentTypes":
       return item.active ? "activ" : "inactiv";
     case "fiscalProfiles":
@@ -2941,11 +2865,11 @@ document.querySelectorAll(".list-block").forEach((container) => {
     }
 
     try {
-      if (action === "edit") {
+      if (action === "edit" && entity !== "roles") {
         openEditor(entity, item);
       }
 
-      if (action === "toggle" && Object.prototype.hasOwnProperty.call(item, "active")) {
+      if (action === "toggle" && entity !== "roles" && Object.prototype.hasOwnProperty.call(item, "active")) {
         const changeReason = requestChangeReason("Introdu mentiunea pentru activare/dezactivare:");
         await updateConfigEntry(entity, id, {
           ...item,
