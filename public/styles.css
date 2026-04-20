@@ -609,3 +609,35 @@ thead th {
     width: 100%;
   }
 }
+
+/* Tranșa B UI additions */
+.status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-right: 4px;
+}
+.badge-neutral { background: #e5e7eb; color: #374151; }
+.badge-warn { background: #fef3c7; color: #92400e; }
+.badge-ok { background: #d1fae5; color: #065f46; }
+.badge-alert { background: #fee2e2; color: #991b1b; }
+
+.action-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.delivery-action {
+  padding: 2px 10px;
+  font-size: 0.8rem;
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.delivery-action:hover {
+  background: #e5e7eb;
+}
