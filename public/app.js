@@ -1,3 +1,15 @@
+function escapeHtml(value) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 const loginScreenEl = document.getElementById("login-screen");
 const pageShellEl = document.getElementById("page-shell");
 const loginFormEl = document.getElementById("login-form");
@@ -454,8 +466,8 @@ function renderOpeningDrafts() {
     .map(
       (item) => `
         <tr>
-          <td>${item.product}</td>
-          <td>${item.location}</td>
+          <td>${escapeHtml(item.product)}</td>
+          <td>${escapeHtml(item.location)}</td>
           <td>${formatNumber(item.quantity)}</td>
         </tr>
       `
@@ -466,7 +478,7 @@ function renderOpeningDrafts() {
     .map(
       (item) => `
         <tr>
-          <td>${item.partner}</td>
+          <td>${escapeHtml(item.partner)}</td>
           <td>${item.direction === "collection" ? "Incasare" : "Plata"}</td>
           <td>${currency.format(Number(item.amount || 0))}</td>
         </tr>
@@ -596,10 +608,10 @@ function renderStockSummary(summary) {
     .map(
       (item) => `
         <tr>
-          <td>${item.location}</td>
-          <td>${item.product}</td>
+          <td>${escapeHtml(item.location)}</td>
+          <td>${escapeHtml(item.product)}</td>
           <td>${formatNumber(item.quantity)}</td>
-          <td>${item.unit}</td>
+          <td>${escapeHtml(item.unit)}</td>
         </tr>
       `
     )
@@ -639,11 +651,11 @@ function renderAutomationStatus(status) {
     .map(
       (item) => `
         <tr>
-          <td>${item.name}</td>
-          <td>${item.roleCode || "-"}</td>
-          <td>${item.channel || "-"}</td>
+          <td>${escapeHtml(item.name)}</td>
+          <td>${escapeHtml(item.roleCode || "-")}</td>
+          <td>${escapeHtml(item.channel || "-")}</td>
           <td>${item.canReceiveTelegram ? "Legat" : "Lipsa legare"}</td>
-          <td>${item.lastSeenAt ? new Date(item.lastSeenAt).toLocaleString("ro-RO") : "-"}</td>
+          <td>${escapeHtml(item.lastSeenAt ? new Date(item.lastSeenAt).toLocaleString("ro-RO") : "-")}</td>
         </tr>
       `
     )
@@ -683,18 +695,18 @@ function renderCriticalAlertsStatus(status) {
     .map(
       (item) => `
         <tr>
-          <td>${item.date}</td>
-          <td>${item.status}</td>
-          <td>${item.workflowStatus}</td>
-          <td>${item.lastReason || "-"}</td>
+          <td>${escapeHtml(item.date)}</td>
+          <td>${escapeHtml(item.status)}</td>
+          <td>${escapeHtml(item.workflowStatus)}</td>
+          <td>${escapeHtml(item.lastReason || "-")}</td>
           <td>V:${item.viewedCount} | L:${item.inProgressCount} | R:${item.resolvedCount}</td>
           <td>
-            Vazuta: ${item.viewedActors || "-"}<br />
-            In lucru: ${item.inProgressActors || "-"}<br />
-            Rezolvata: ${item.resolvedActors || "-"}
+            Vazuta: ${escapeHtml(item.viewedActors || "-")}<br />
+            In lucru: ${escapeHtml(item.inProgressActors || "-")}<br />
+            Rezolvata: ${escapeHtml(item.resolvedActors || "-")}
           </td>
-          <td>${item.escalatedAt ? `${item.escalationCount} / ${new Date(item.escalatedAt).toLocaleString("ro-RO")} / ${item.escalationReason || "-"}` : "-"}</td>
-          <td>${item.lastAlertAt ? new Date(item.lastAlertAt).toLocaleString("ro-RO") : "-"}</td>
+          <td>${item.escalatedAt ? `${item.escalationCount} / ${escapeHtml(new Date(item.escalatedAt).toLocaleString("ro-RO"))} / ${escapeHtml(item.escalationReason || "-")}` : "-"}</td>
+          <td>${escapeHtml(item.lastAlertAt ? new Date(item.lastAlertAt).toLocaleString("ro-RO") : "-")}</td>
         </tr>
       `
     )
@@ -721,17 +733,17 @@ function renderReceipts(receipts) {
       return `
         <tr>
           <td>#${item.id}</td>
-          <td>${item.product}</td>
-          <td>${item.supplier}</td>
-          <td>${formatNumber(item.grossQuantity || item.quantity)} / ${formatNumber(item.provisionalNetQuantity || item.quantity)} ${item.unit}</td>
-          <td>${item.location || "-"}</td>
+          <td>${escapeHtml(item.product)}</td>
+          <td>${escapeHtml(item.supplier)}</td>
+          <td>${formatNumber(item.grossQuantity || item.quantity)} / ${formatNumber(item.provisionalNetQuantity || item.quantity)} ${escapeHtml(item.unit)}</td>
+          <td>${escapeHtml(item.location || "-")}</td>
           <td>${currency.format(Number(item.preliminaryPayableAmount || 0))}</td>
           <td>
             <select class="status" data-id="${item.id}" ${canEditStatuses ? "" : "disabled"}>
               ${statusOptions(item.status).join("")}
             </select>
           </td>
-          <td>${item.source}</td>
+          <td>${escapeHtml(item.source)}</td>
         </tr>
       `;
     })
@@ -753,9 +765,9 @@ function renderProcessings(processings) {
       (item) => `
         <tr>
           <td>#${item.id}</td>
-          <td>${item.product}</td>
+          <td>${escapeHtml(item.product)}</td>
           <td>#${item.receiptId}</td>
-          <td>${item.processingType}</td>
+          <td>${escapeHtml(item.processingType)}</td>
           <td>${formatNumber(item.processedQuantity)}</td>
           <td>${formatNumber(item.confirmedWaste)}</td>
           <td>
@@ -781,10 +793,10 @@ function renderTransactions(transactions) {
         <tr>
           <td>#${item.id}</td>
           <td>${item.referenceType === "delivery" ? `Livrare #${item.deliveryId}` : `Receptie #${item.receiptId}`}</td>
-          <td>${item.partner}</td>
+          <td>${escapeHtml(item.partner)}</td>
           <td>${item.direction === "collection" ? "Incasare" : "Plata"}</td>
           <td>
-            <div>${item.paymentType || "-"}</div>
+            <div>${escapeHtml(item.paymentType || "-")}</div>
             <select class="transaction-status" data-id="${item.id}" ${canEditStatuses ? "" : "disabled"}>
               ${["Confirmat", "Inchis", "Anulat", "Redeschis"].map((status) => {
                 const selected = item.status === status ? "selected" : "";
@@ -807,11 +819,11 @@ function renderDeliveries(deliveries) {
         <tr>
           <td>#${item.id}</td>
           <td>#${item.receiptId}</td>
-          <td>${item.customer}</td>
-          <td>${item.product}</td>
+          <td>${escapeHtml(item.customer)}</td>
+          <td>${escapeHtml(item.product)}</td>
           <td>${formatNumber(item.deliveredQuantity)}</td>
           <td>
-            <div>${item.invoiceNumber || "-"}</div>
+            <div>${escapeHtml(item.invoiceNumber || "-")}</div>
             <select class="delivery-status" data-id="${item.id}" ${canEditStatuses ? "" : "disabled"}>
               ${["Confirmat", "Inchis", "Anulat", "Redeschis"].map((status) => {
                 const selected = item.status === status ? "selected" : "";
@@ -833,8 +845,8 @@ function renderComplaints(complaints) {
         <tr>
           <td>#${item.id}</td>
           <td>#${item.deliveryId}</td>
-          <td>${item.customer}</td>
-          <td>${item.complaintType}</td>
+          <td>${escapeHtml(item.customer)}</td>
+          <td>${escapeHtml(item.complaintType)}</td>
           <td>${formatNumber(item.contestedQuantity)}</td>
           <td>
             <select class="complaint-status" data-id="${item.id}" ${canEditStatuses ? "" : "disabled"}>
@@ -892,10 +904,10 @@ function renderOpenJournal() {
       (item) => `
         <tr>
           <td>${item.id ? `#${item.id}` : "Sold initial"}</td>
-          <td>${item.supplier || item.partner}</td>
+          <td>${escapeHtml(item.supplier || item.partner)}</td>
           <td>${currency.format(Number(item.preliminaryPayableAmount || item.amount || 0))}</td>
           <td>${currency.format(Number(item.paidAmount || item.settledAmount || 0))}</td>
-          <td>${item.paymentStatus || item.status || "Neachitat"}</td>
+          <td>${escapeHtml(item.paymentStatus || item.status || "Neachitat")}</td>
         </tr>
       `
     )
@@ -906,10 +918,10 @@ function renderOpenJournal() {
       (item) => `
         <tr>
           <td>${item.id ? `#${item.id}` : "Sold initial"}</td>
-          <td>${item.customer || item.partner}</td>
+          <td>${escapeHtml(item.customer || item.partner)}</td>
           <td>${currency.format(Number(item.contractPrice || 0) * Number(item.deliveredQuantity || 0) || Number(item.amount || 0))}</td>
           <td>${currency.format(Number(item.collectedAmount || item.settledAmount || 0))}</td>
-          <td>${item.collectionStatus || item.status || "Neincasat"}</td>
+          <td>${escapeHtml(item.collectionStatus || item.status || "Neincasat")}</td>
         </tr>
       `
     )
@@ -923,11 +935,11 @@ function renderAuditLogs(auditLogs) {
       (item) => `
         <tr>
           <td>#${item.id}</td>
-          <td>${item.entityType}${item.entityId ? ` #${item.entityId}` : ""}</td>
-          <td>${item.action}</td>
-          <td>${item.user || "-"}</td>
-          <td>${item.reason}</td>
-          <td>${String(item.createdAt || "").replace("T", " ").slice(0, 16)}</td>
+          <td>${escapeHtml(item.entityType)}${item.entityId ? ` #${item.entityId}` : ""}</td>
+          <td>${escapeHtml(item.action)}</td>
+          <td>${escapeHtml(item.user || "-")}</td>
+          <td>${escapeHtml(item.reason)}</td>
+          <td>${escapeHtml(String(item.createdAt || "").replace("T", " ").slice(0, 16))}</td>
         </tr>
       `
     )
@@ -952,11 +964,11 @@ function renderLockouts(lockouts) {
     .map(
       (item) => `
         <tr>
-          <td>${item.username}</td>
-          <td>${String(item.blockedUntil || "").replace("T", " ").slice(0, 16)}</td>
+          <td>${escapeHtml(item.username)}</td>
+          <td>${escapeHtml(String(item.blockedUntil || "").replace("T", " ").slice(0, 16))}</td>
           <td>${Math.max(Math.ceil(Number(item.retryAfterMs || 0) / 60000), 1)} min</td>
           <td>
-            <button class="ghost-button unlock-user-button" type="button" data-username="${item.username}">
+            <button class="ghost-button unlock-user-button" type="button" data-username="${escapeHtml(item.username)}">
               Deblocheaza
             </button>
           </td>
@@ -996,8 +1008,8 @@ function renderDailyReport(report) {
       (item) => `
         <tr>
           <td>#${item.id}</td>
-          <td>${item.supplier}</td>
-          <td>${item.product}</td>
+          <td>${escapeHtml(item.supplier)}</td>
+          <td>${escapeHtml(item.product)}</td>
           <td>${formatNumber(item.grossQuantity || item.quantity)}</td>
           <td>${formatNumber(item.provisionalNetQuantity || item.quantity)}</td>
         </tr>
@@ -1011,7 +1023,7 @@ function renderDailyReport(report) {
         <tr>
           <td>#${item.id}</td>
           <td>#${item.receiptId}</td>
-          <td>${item.processingType}</td>
+          <td>${escapeHtml(item.processingType)}</td>
           <td>${formatNumber(item.processedQuantity)}</td>
           <td>${formatNumber(item.confirmedWaste)}</td>
         </tr>
@@ -1024,9 +1036,9 @@ function renderDailyReport(report) {
       (item) => `
         <tr>
           <td>#${item.id}</td>
-          <td>${item.partner}</td>
+          <td>${escapeHtml(item.partner)}</td>
           <td>${item.direction === "collection" ? "Incasare" : "Plata"}</td>
-          <td>${item.paymentType || "-"}</td>
+          <td>${escapeHtml(item.paymentType || "-")}</td>
           <td>${currency.format(Number(item.amount || 0))}</td>
         </tr>
       `
@@ -1038,10 +1050,10 @@ function renderDailyReport(report) {
       (item) => `
         <tr>
           <td>#${item.id}</td>
-          <td>${item.customer}</td>
-          <td>${item.product}</td>
+          <td>${escapeHtml(item.customer)}</td>
+          <td>${escapeHtml(item.product)}</td>
           <td>${formatNumber(item.deliveredQuantity)}</td>
-          <td>${item.invoiceNumber || "-"}</td>
+          <td>${escapeHtml(item.invoiceNumber || "-")}</td>
         </tr>
       `
     )
@@ -1053,9 +1065,9 @@ function renderDailyReport(report) {
         <tr>
           <td>#${item.id}</td>
           <td>#${item.deliveryId}</td>
-          <td>${item.complaintType}</td>
+          <td>${escapeHtml(item.complaintType)}</td>
           <td>${formatNumber(item.contestedQuantity)}</td>
-          <td>${item.status}</td>
+          <td>${escapeHtml(item.status)}</td>
         </tr>
       `
     )
@@ -1064,8 +1076,11 @@ function renderDailyReport(report) {
 
 function renderSelectOptions(select, items, mapLabel, placeholder, mapValue = (item) => item.id || item.code) {
   const options = [
-    `<option value="" disabled selected>${placeholder}</option>`,
-    ...items.map((item) => `<option value="${mapValue(item)}">${mapLabel(item)}</option>`)
+    `<option value="" disabled selected>${escapeHtml(placeholder)}</option>`,
+    ...items.map(
+      (item) =>
+        `<option value="${escapeHtml(mapValue(item))}">${escapeHtml(mapLabel(item))}</option>`
+    )
   ];
 
   select.innerHTML = options.join("");
@@ -1236,17 +1251,17 @@ function renderFilterOptions() {
 
   receiptProductFilterEl.innerHTML = [
     '<option value="">Toate produsele</option>',
-    ...productNames.map((name) => `<option value="${name}">${name}</option>`)
+    ...productNames.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
   ].join("");
 
   processingTypeFilterEl.innerHTML = [
     '<option value="">Toate procesarile</option>',
-    ...processingTypes.map((name) => `<option value="${name}">${name}</option>`)
+    ...processingTypes.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
   ].join("");
 
   processingReceiptFilterEl.innerHTML = [
     '<option value="">Toate receptiile</option>',
-    ...processingReceipts.map((id) => `<option value="${id}">#${id}</option>`)
+    ...processingReceipts.map((id) => `<option value="${Number(id)}">#${Number(id)}</option>`)
   ].join("");
 }
 
@@ -1268,16 +1283,16 @@ function renderMiniList(entity, items) {
       return `
         <article class="list-item">
           <div>
-            <strong>${getItemTitle(entity, item)}</strong>
-            <p>${detail}</p>
+            <strong>${escapeHtml(getItemTitle(entity, item))}</strong>
+            <p>${escapeHtml(detail)}</p>
           </div>
           <div class="list-actions">
-            <button class="ghost-button" type="button" data-action="edit" data-entity="${entity}" data-id="${item.id}">
+            <button class="ghost-button" type="button" data-action="edit" data-entity="${escapeHtml(entity)}" data-id="${Number(item.id)}">
               Editeaza
             </button>
             ${
               canToggle
-                ? `<button class="ghost-button" type="button" data-action="toggle" data-entity="${entity}" data-id="${item.id}">
+                ? `<button class="ghost-button" type="button" data-action="toggle" data-entity="${escapeHtml(entity)}" data-id="${Number(item.id)}">
                     ${item.active ? "Dezactiveaza" : "Activeaza"}
                   </button>`
                 : ""
@@ -1339,11 +1354,11 @@ function renderSetupLists(config) {
 
 function renderSetupSelectors(config) {
   fiscalProfileOptions.innerHTML = config.fiscalProfiles
-    .map((item) => `<option value="${item.name}">${item.name}</option>`)
+    .map((item) => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.name)}</option>`)
     .join("");
 
   roleOptions.innerHTML = config.roles
-    .map((item) => `<option value="${item.code}">${item.name}</option>`)
+    .map((item) => `<option value="${escapeHtml(item.code)}">${escapeHtml(item.name)}</option>`)
     .join("");
 
   systemSettingsForm.elements.closeOfDayHour.value = config.systemSettings.closeOfDayHour;
@@ -1539,14 +1554,14 @@ function renderEditorField(field, item) {
     const options = fieldOptions(field)
       .map((option) => {
         const selected = String(option.value) === safeValue ? "selected" : "";
-        return `<option value="${option.value}" ${selected}>${option.label}</option>`;
+        return `<option value="${escapeHtml(option.value)}" ${selected}>${escapeHtml(option.label)}</option>`;
       })
       .join("");
 
     return `
       <label>
-        ${field.label}
-        <select name="${field.name}">
+        ${escapeHtml(field.label)}
+        <select name="${escapeHtml(field.name)}">
           ${options}
         </select>
       </label>
@@ -1555,12 +1570,12 @@ function renderEditorField(field, item) {
 
   return `
     <label>
-      ${field.label}
+      ${escapeHtml(field.label)}
       <input
-        name="${field.name}"
-        type="${field.type || "text"}"
-        value="${safeValue.replace(/"/g, "&quot;")}"
-        ${field.step ? `step="${field.step}"` : ""}
+        name="${escapeHtml(field.name)}"
+        type="${escapeHtml(field.type || "text")}"
+        value="${escapeHtml(safeValue)}"
+        ${field.step ? `step="${escapeHtml(field.step)}"` : ""}
       />
     </label>
   `;

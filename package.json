@@ -8,7 +8,10 @@
     "dev": "node --watch src/server.js",
     "test": "node --test --test-isolation=none test/*.test.js",
     "backups:list": "node scripts/runtime-backup-cli.js list",
-    "backups:restore": "node scripts/runtime-backup-cli.js restore"
+    "backups:restore": "node scripts/runtime-backup-cli.js restore",
+    "telegram:webhook:set": "node scripts/register-telegram-webhook.js set",
+    "telegram:webhook:info": "node scripts/register-telegram-webhook.js info",
+    "telegram:webhook:delete": "node scripts/register-telegram-webhook.js delete"
   },
   "keywords": [
     "agro",

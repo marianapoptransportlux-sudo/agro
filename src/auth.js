@@ -1,4 +1,7 @@
 const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
+const { writeJsonAtomic } = require("./atomic-write");
 
 const SESSION_COOKIE_NAME = "agro_session";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
@@ -12,7 +15,39 @@ const COMMON_WEAK_PASSWORDS = new Set([
   "admin1234", "welcome123", "passw0rd12", "operator12", "contabil12"
 ]);
 
-const sessions = new Map();
+const authSessionsFile = path.join(process.cwd(), ".runtime-data", "auth-sessions.json");
+
+function loadAuthSessions() {
+  try {
+    if (!fs.existsSync(authSessionsFile)) {
+      return new Map();
+    }
+    const raw = fs.readFileSync(authSessionsFile, "utf8");
+    const parsed = JSON.parse(raw);
+    const now = Date.now();
+    const entries = Object.entries(parsed || {}).filter(
+      ([, session]) => session && Number(session.expiresAt || 0) > now
+    );
+    return new Map(entries);
+  } catch (error) {
+    console.error("Failed to load persisted auth sessions:", error.message);
+    return new Map();
+  }
+}
+
+function persistAuthSessions() {
+  try {
+    const dir = path.dirname(authSessionsFile);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    writeJsonAtomic(authSessionsFile, Object.fromEntries(sessions.entries()));
+  } catch (error) {
+    console.error("Failed to persist auth sessions:", error.message);
+  }
+}
+
+const sessions = loadAuthSessions();
 const loginAttemptsByIp = new Map();
 const loginAttemptsByUsername = new Map();
 
@@ -97,14 +132,20 @@ function parseCookies(cookieHeader = "") {
 
 function cleanupExpiredSessions() {
   const now = Date.now();
+  let changed = false;
   for (const [token, session] of sessions.entries()) {
     if (!session || session.expiresAt <= now) {
       sessions.delete(token);
+      changed = true;
       continue;
     }
     if (session.lastActivityAt && now - session.lastActivityAt > SESSION_INACTIVITY_MS) {
       sessions.delete(token);
+      changed = true;
     }
+  }
+  if (changed) {
+    persistAuthSessions();
   }
 }
 
@@ -143,12 +184,13 @@ function createSession(user) {
     expiresAt: Date.now() + SESSION_TTL_MS,
     lastActivityAt: Date.now()
   });
+  persistAuthSessions();
   return token;
 }
 
 function destroySession(token) {
-  if (token) {
-    sessions.delete(token);
+  if (token && sessions.delete(token)) {
+    persistAuthSessions();
   }
 }
 
@@ -298,6 +340,7 @@ function attachCurrentUser(req, _res, next) {
       req.currentUser = session.user;
     } else {
       sessions.delete(token);
+      persistAuthSessions();
     }
   }
 

@@ -33,7 +33,10 @@ async function getConfigHandler(_req, res) {
 
 async function createConfigEntryHandler(req, res, entity) {
   try {
-    const entry = await createConfigEntry(entity, getBody(req));
+    const entry = await createConfigEntry(entity, {
+      ...getBody(req),
+      createdBy: getActorLabel(req)
+    });
     return sendJson(res, 201, entry);
   } catch (error) {
     console.error(`Failed to create config entry for ${entity}:`, error.message);
