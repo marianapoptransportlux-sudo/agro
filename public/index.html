@@ -83,21 +83,18 @@
               <span class="sidebar-icon">🛠️</span><span>Configurare</span>
             </button>
           </nav>
+          <div class="sidebar-footer">
+            <div class="sidebar-user">
+              <p class="sidebar-user-name" id="current-user-name">-</p>
+              <p class="sidebar-user-role" id="current-user-role">-</p>
+            </div>
+            <div class="sidebar-user-actions">
+              <button class="sidebar-item-ghost" id="change-password-button" type="button">Schimbă parola</button>
+              <button class="sidebar-item-ghost sidebar-item-danger" id="logout-button" type="button">Ieșire</button>
+            </div>
+          </div>
         </aside>
         <main class="main-area">
-      <header class="session-bar">
-        <div>
-          <p class="eyebrow">Sesiune activa</p>
-          <strong id="current-user-name">-</strong>
-          <span id="current-user-role">-</span>
-        </div>
-        <div class="session-actions">
-          <button class="ghost-button" id="change-password-button" type="button">
-            Schimba parola
-          </button>
-          <button class="ghost-button" id="logout-button" type="button">Iesire</button>
-        </div>
-      </header>
 
       <section class="panel password-panel" id="password-panel" hidden>
         <div class="panel-head">
@@ -125,22 +122,6 @@
           </div>
           <p class="form-message" id="change-password-message"></p>
         </form>
-      </section>
-
-      <section class="hero">
-        <div>
-          <p class="eyebrow">Soft elevator</p>
-          <h1>Fundatia Etapei 1: operare si configurare</h1>
-          <p class="hero-copy">
-            Dashboard-ul acopera receptia curenta si administreaza nomenclatoarele de baza:
-            parteneri, produse, locatii, roluri, utilizatori si tarife.
-          </p>
-        </div>
-        <div class="hero-card">
-          <p>Etapa activa</p>
-          <strong>Fundatie + configurare</strong>
-          <span>Pregateste fluxurile pentru receptie, stoc si procesare.</span>
-        </div>
       </section>
 
         <section class="stats" id="stats" data-view="acasa"></section>

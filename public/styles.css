@@ -125,6 +125,67 @@ textarea {
   text-align: center;
 }
 
+.sidebar-separator {
+  height: 1px;
+  margin: 8px 16px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: 16px 16px 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sidebar-user-name {
+  margin: 0;
+  font-weight: 700;
+  color: #ffffff;
+  font-size: 0.92rem;
+}
+
+.sidebar-user-role {
+  margin: 2px 0 0;
+  font-size: 0.75rem;
+  color: #a8b09a;
+}
+
+.sidebar-user-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-item-ghost {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #d8ddc9;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.sidebar-item-ghost:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.sidebar-item-danger {
+  color: #f7a79c;
+  border-color: rgba(247, 167, 156, 0.3);
+}
+
+.sidebar-item-danger:hover {
+  background: rgba(247, 167, 156, 0.12);
+  color: #ffffff;
+}
+
 .main-area {
   flex: 1;
   min-width: 0;

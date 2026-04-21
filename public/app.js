@@ -220,9 +220,8 @@ function applyRoleAccess() {
 
   const activeBtn = document.querySelector('.view-tab.is-active');
   const activeView = activeBtn?.dataset.view;
-  if (!activeView || !canAccessView(activeView)) {
-    setView(getDefaultView());
-  }
+  const target = activeView && canAccessView(activeView) ? activeView : getDefaultView();
+  setView(target);
 }
 
 function showLoginScreen(message = "") {
