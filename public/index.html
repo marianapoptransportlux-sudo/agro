@@ -40,6 +40,25 @@
     </section>
 
     <div class="page-shell" id="page-shell" hidden>
+      <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Meniu">☰</button>
+      <div class="layout">
+        <aside class="sidebar" id="sidebar">
+          <div class="sidebar-brand">
+            <span class="sidebar-brand-title">SOFT ELEVATOR</span>
+            <span class="sidebar-brand-sub">Etapa 1</span>
+          </div>
+          <nav class="sidebar-nav">
+            <button class="view-tab sidebar-item is-active" data-view="operations" type="button">
+              <span class="sidebar-icon">📋</span>
+              <span>Operare</span>
+            </button>
+            <button class="view-tab sidebar-item" data-view="setup" data-access="setup" type="button">
+              <span class="sidebar-icon">⚙️</span>
+              <span>Configurare etapa 1</span>
+            </button>
+          </nav>
+        </aside>
+        <main class="main-area">
       <header class="session-bar">
         <div>
           <p class="eyebrow">Sesiune activa</p>
@@ -97,11 +116,6 @@
           <span>Pregateste fluxurile pentru receptie, stoc si procesare.</span>
         </div>
       </section>
-
-      <nav class="view-switch">
-        <button class="view-tab is-active" data-view="operations" type="button">Operare</button>
-        <button class="view-tab" data-view="setup" data-access="setup" type="button">Configurare etapa 1</button>
-      </nav>
 
       <section class="view-section is-active" data-view-panel="operations">
         <section class="stats" id="stats"></section>
@@ -1319,6 +1333,8 @@
           </form>
         </section>
       </section>
+        </main>
+      </div>
     </div>
 
     <script src="/app.js"></script>

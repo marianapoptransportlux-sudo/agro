@@ -34,9 +34,118 @@ textarea {
 }
 
 .page-shell {
-  width: min(1360px, calc(100% - 32px));
-  margin: 0 auto;
-  padding: 32px 0 48px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.layout {
+  display: flex;
+  min-height: 100vh;
+  align-items: stretch;
+}
+
+.sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, #1f2a18 0%, #0f1609 100%);
+  color: #e8eadb;
+  padding: 24px 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  box-shadow: 2px 0 18px rgba(0, 0, 0, 0.12);
+  z-index: 10;
+}
+
+.sidebar-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 24px;
+  line-height: 1.15;
+}
+
+.sidebar-brand-title {
+  font-weight: 800;
+  font-size: 1rem;
+  letter-spacing: 0.08em;
+  color: #ffffff;
+}
+
+.sidebar-brand-sub {
+  font-size: 0.78rem;
+  color: #a8b09a;
+  letter-spacing: 0.04em;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 8px;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 16px;
+  border: 0;
+  background: transparent;
+  color: #d8ddc9;
+  text-align: left;
+  font-size: 0.92rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  border-left: 3px solid transparent;
+}
+
+.sidebar-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+}
+
+.sidebar-item.is-active {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border-left-color: #8cc63f;
+  font-weight: 600;
+}
+
+.sidebar-icon {
+  font-size: 1.05rem;
+  width: 22px;
+  text-align: center;
+}
+
+.main-area {
+  flex: 1;
+  min-width: 0;
+  padding: 24px 32px 48px;
+  max-width: calc(1360px);
+}
+
+.sidebar-toggle {
+  display: none;
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 20;
+  background: #1f2a18;
+  color: #fff;
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 1.2rem;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
 }
 
 .login-screen {
@@ -166,31 +275,7 @@ h2 {
   margin: 0;
 }
 
-.view-switch {
-  display: inline-grid;
-  grid-auto-flow: column;
-  gap: 10px;
-  margin: 24px 0 18px;
-  padding: 8px;
-  background: rgba(255, 255, 255, 0.65);
-  border-radius: 999px;
-  border: 1px solid var(--line);
-}
-
-.view-tab {
-  border: 0;
-  border-radius: 999px;
-  padding: 12px 20px;
-  background: transparent;
-  color: var(--muted);
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.view-tab.is-active {
-  background: linear-gradient(135deg, var(--accent), #385522);
-  color: white;
-}
+/* .view-switch + .view-tab styles replaced by sidebar; sidebar items still use .view-tab class for setView() targeting but styling comes from .sidebar-item */
 
 .view-section {
   display: none;
@@ -603,11 +688,6 @@ thead th {
     max-width: none;
   }
 
-  .view-switch {
-    display: grid;
-    grid-auto-flow: row;
-    width: 100%;
-  }
 }
 
 /* Tranșa B UI additions */
