@@ -218,10 +218,7 @@ function applyRoleAccess() {
     element.hidden = !canAccess(capability);
   });
 
-  const activeBtn = document.querySelector('.view-tab.is-active');
-  const activeView = activeBtn?.dataset.view;
-  const target = activeView && canAccessView(activeView) ? activeView : getDefaultView();
-  setView(target);
+  setView(getDefaultView());
 }
 
 function showLoginScreen(message = "") {
@@ -2562,8 +2559,39 @@ function getEntityItem(entity, id) {
 }
 
 document.querySelectorAll(".view-tab").forEach((button) => {
-  button.addEventListener("click", () => setView(button.dataset.view));
+  button.addEventListener("click", () => {
+    setView(button.dataset.view);
+    closeSidebarDrawer();
+  });
 });
+
+const sidebarEl = document.getElementById("sidebar");
+const sidebarToggleEl = document.getElementById("sidebar-toggle");
+const sidebarBackdropEl = document.getElementById("sidebar-backdrop");
+
+function openSidebarDrawer() {
+  sidebarEl?.classList.add("is-open");
+  sidebarBackdropEl?.classList.add("is-open");
+}
+
+function closeSidebarDrawer() {
+  sidebarEl?.classList.remove("is-open");
+  sidebarBackdropEl?.classList.remove("is-open");
+}
+
+if (sidebarToggleEl) {
+  sidebarToggleEl.addEventListener("click", () => {
+    if (sidebarEl?.classList.contains("is-open")) {
+      closeSidebarDrawer();
+    } else {
+      openSidebarDrawer();
+    }
+  });
+}
+
+if (sidebarBackdropEl) {
+  sidebarBackdropEl.addEventListener("click", closeSidebarDrawer);
+}
 
 productSelect.addEventListener("change", () => {
   humidityInput.value = "";
