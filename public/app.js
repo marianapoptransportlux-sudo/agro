@@ -178,14 +178,50 @@ function canAccess(capability) {
   return Array.isArray(currentSessionUser.permissions) && currentSessionUser.permissions.includes(capability);
 }
 
+function getDefaultView() {
+  const candidates = [
+    "acasa",
+    "receptii",
+    "procesare",
+    "stoc",
+    "livrari",
+    "reclamatii",
+    "financiar",
+    "deschidere",
+    "rapoarte",
+    "audit",
+    "configurare"
+  ];
+  const saved = (function () {
+    try { return window.localStorage.getItem("active-view"); } catch (_err) { return null; }
+  })();
+  if (saved && canAccessView(saved)) {
+    return saved;
+  }
+  for (const v of candidates) {
+    if (canAccessView(v)) return v;
+  }
+  return "acasa";
+}
+
+function canAccessView(view) {
+  // Match the sidebar button with this data-view; inherit its data-access if any
+  const btn = document.querySelector(`.view-tab[data-view="${view}"]`);
+  if (!btn) return false;
+  const cap = btn.dataset.access;
+  return !cap || canAccess(cap);
+}
+
 function applyRoleAccess() {
   document.querySelectorAll("[data-access]").forEach((element) => {
     const capability = element.dataset.access;
     element.hidden = !canAccess(capability);
   });
 
-  if (!canAccess("setup") && document.querySelector('.view-tab.is-active')?.dataset.view === "setup") {
-    setView("operations");
+  const activeBtn = document.querySelector('.view-tab.is-active');
+  const activeView = activeBtn?.dataset.view;
+  if (!activeView || !canAccessView(activeView)) {
+    setView(getDefaultView());
   }
 }
 
@@ -326,9 +362,26 @@ function setView(view) {
     button.classList.toggle("is-active", button.dataset.view === view);
   });
 
+  // Legacy view-section wrappers (few remain)
   document.querySelectorAll(".view-section").forEach((section) => {
     section.classList.toggle("is-active", section.dataset.viewPanel === view);
   });
+
+  // New per-panel data-view gating (Faza 2 sidebar redesign)
+  document.querySelectorAll("[data-view]").forEach((el) => {
+    if (el.classList.contains("view-tab")) return; // sidebar buttons
+    const allowed = String(el.dataset.view || "")
+      .split(",")
+      .map((v) => v.trim())
+      .filter(Boolean);
+    el.hidden = allowed.length > 0 && !allowed.includes(view);
+  });
+
+  try {
+    window.localStorage.setItem("active-view", view);
+  } catch (_err) {
+    // localStorage blocked — ignore
+  }
 }
 
 function renderStats(stats) {
