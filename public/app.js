@@ -158,82 +158,6 @@ const currency = new Intl.NumberFormat("ro-RO", {
   maximumFractionDigits: 2
 });
 
-const roleAccessMap = {
-  operator: new Set([
-    "receipts-read",
-    "receipt-write",
-    "processings-read",
-    "processing-write",
-    "stocks-read",
-    "deliveries-read",
-    "delivery-write",
-    "complaints-read",
-    "complaint-write",
-    "config-read"
-  ]),
-  manager: new Set([
-    "receipts-read",
-    "receipt-write",
-    "processings-read",
-    "processing-write",
-    "stocks-read",
-    "deliveries-read",
-    "delivery-write",
-    "complaints-read",
-    "complaint-write",
-    "finance",
-    "finance-write",
-    "opening",
-    "reports",
-    "audit",
-    "config-read"
-  ]),
-  accountant: new Set([
-    "receipts-read",
-    "processings-read",
-    "stocks-read",
-    "deliveries-read",
-    "complaints-read",
-    "complaint-write",
-    "finance",
-    "finance-write",
-    "opening",
-    "reports",
-    "config-read"
-  ]),
-  admin: new Set([
-    "receipts-read",
-    "receipt-write",
-    "processings-read",
-    "processing-write",
-    "stocks-read",
-    "deliveries-read",
-    "delivery-write",
-    "complaints-read",
-    "complaint-write",
-    "finance",
-    "finance-write",
-    "opening",
-    "reports",
-    "audit",
-    "security-admin",
-    "setup",
-    "config-read"
-  ]),
-  control: new Set([
-    "receipts-read",
-    "processings-read",
-    "stocks-read",
-    "deliveries-read",
-    "complaints-read",
-    "finance",
-    "opening",
-    "reports",
-    "audit",
-    "config-read"
-  ])
-};
-
 function formatNumber(value) {
   return new Intl.NumberFormat("ro-RO", {
     maximumFractionDigits: 2
@@ -243,7 +167,7 @@ function formatNumber(value) {
 function setCurrentUser(user) {
   currentSessionUser = user || null;
   currentUserNameEl.textContent = currentSessionUser?.name || "-";
-  currentUserRoleEl.textContent = currentSessionUser?.roleCode || "-";
+  currentUserRoleEl.textContent = currentSessionUser?.roleName || currentSessionUser?.roleCode || "-";
 }
 
 function canAccess(capability) {
@@ -251,7 +175,41 @@ function canAccess(capability) {
     return false;
   }
 
-  return roleAccessMap[currentSessionUser.roleCode]?.has(capability) || false;
+  return Array.isArray(currentSessionUser.permissions) && currentSessionUser.permissions.includes(capability);
+}
+
+function getDefaultView() {
+  const candidates = [
+    "acasa",
+    "receptii",
+    "procesare",
+    "stoc",
+    "livrari",
+    "reclamatii",
+    "financiar",
+    "deschidere",
+    "rapoarte",
+    "audit",
+    "configurare"
+  ];
+  const saved = (function () {
+    try { return window.localStorage.getItem("active-view"); } catch (_err) { return null; }
+  })();
+  if (saved && canAccessView(saved)) {
+    return saved;
+  }
+  for (const v of candidates) {
+    if (canAccessView(v)) return v;
+  }
+  return "acasa";
+}
+
+function canAccessView(view) {
+  // Match the sidebar button with this data-view; inherit its data-access if any
+  const btn = document.querySelector(`.view-tab[data-view="${view}"]`);
+  if (!btn) return false;
+  const cap = btn.dataset.access;
+  return !cap || canAccess(cap);
 }
 
 function applyRoleAccess() {
@@ -260,9 +218,7 @@ function applyRoleAccess() {
     element.hidden = !canAccess(capability);
   });
 
-  if (!canAccess("setup") && document.querySelector('.view-tab.is-active')?.dataset.view === "setup") {
-    setView("operations");
-  }
+  setView(getDefaultView());
 }
 
 function showLoginScreen(message = "") {
@@ -402,9 +358,26 @@ function setView(view) {
     button.classList.toggle("is-active", button.dataset.view === view);
   });
 
+  // Legacy view-section wrappers (few remain)
   document.querySelectorAll(".view-section").forEach((section) => {
     section.classList.toggle("is-active", section.dataset.viewPanel === view);
   });
+
+  // New per-panel data-view gating (Faza 2 sidebar redesign)
+  document.querySelectorAll("[data-view]").forEach((el) => {
+    if (el.classList.contains("view-tab")) return; // sidebar buttons
+    const allowed = String(el.dataset.view || "")
+      .split(",")
+      .map((v) => v.trim())
+      .filter(Boolean);
+    el.hidden = allowed.length > 0 && !allowed.includes(view);
+  });
+
+  try {
+    window.localStorage.setItem("active-view", view);
+  } catch (_err) {
+    // localStorage blocked — ignore
+  }
 }
 
 function renderStats(stats) {
@@ -799,29 +772,57 @@ function renderTransactions(transactions) {
     .join("");
 }
 
+const DELIVERY_TRANSITIONS = {
+  Proiect: ["Confirmat", "Anulat"],
+  Confirmat: ["Livrat", "Anulat"],
+  Livrat: ["Inchis", "Redeschis"],
+  Inchis: ["Redeschis"],
+  Redeschis: ["Livrat", "Inchis", "Anulat"],
+  Anulat: []
+};
+
+function deliveryStatusBadge(status) {
+  const classMap = {
+    Proiect: "badge-neutral",
+    Confirmat: "badge-warn",
+    Livrat: "badge-ok",
+    Inchis: "badge-neutral",
+    Anulat: "badge-alert",
+    Redeschis: "badge-warn"
+  };
+  const label = status === "Confirmat" ? "Confirmat (Rezervat)" : status || "Proiect";
+  return `<span class="status-badge ${classMap[status] || "badge-neutral"}">${label}</span>`;
+}
+
 function renderDeliveries(deliveries) {
   const canEditStatuses = canAccess("delivery-write");
   deliveriesBodyEl.innerHTML = deliveries
-    .map(
-      (item) => `
+    .map((item) => {
+      const status = item.status || "Proiect";
+      const allowed = DELIVERY_TRANSITIONS[status] || [];
+      const buttons = canEditStatuses
+        ? allowed
+            .map(
+              (next) => `<button type="button" class="delivery-action" data-id="${item.id}" data-action="${next}">${next}</button>`
+            )
+            .join(" ")
+        : "";
+      const qty = item.netWeight > 0 ? item.netWeight : item.deliveredQuantity;
+      return `
         <tr>
           <td>#${item.id}</td>
           <td>#${item.receiptId}</td>
           <td>${item.customer}</td>
           <td>${item.product}</td>
-          <td>${formatNumber(item.deliveredQuantity)}</td>
+          <td>${formatNumber(qty)}</td>
           <td>
             <div>${item.invoiceNumber || "-"}</div>
-            <select class="delivery-status" data-id="${item.id}" ${canEditStatuses ? "" : "disabled"}>
-              ${["Confirmat", "Inchis", "Anulat", "Redeschis"].map((status) => {
-                const selected = item.status === status ? "selected" : "";
-                return `<option value="${status}" ${selected}>${status}</option>`;
-              }).join("")}
-            </select>
+            <div>${deliveryStatusBadge(status)}</div>
+            <div class="action-row">${buttons}</div>
           </td>
         </tr>
-      `
-    )
+      `;
+    })
     .join("");
 }
 
@@ -1309,9 +1310,9 @@ function getItemDetails(entity, item) {
     case "tariffs":
       return `${item.product} | ${item.calculation} | valabil din ${item.validFrom} | ${item.active ? "activ" : "inactiv"}`;
     case "roles":
-      return `${item.code} | ${item.permissions}`;
+      return `${item.code} | ${item.permissions}${item.system ? " | sistem" : ""}`;
     case "users":
-      return `${item.username || "-"} | ${item.roleCode} | ${item.channel} | ${item.active === false ? "inactiv" : "activ"}`;
+      return `${item.username || "-"} | ${item.roleName || item.roleCode} | ${item.channel} | ${item.active === false ? "inactiv" : "activ"}`;
     case "paymentTypes":
       return item.active ? "activ" : "inactiv";
     case "fiscalProfiles":
@@ -2558,8 +2559,39 @@ function getEntityItem(entity, id) {
 }
 
 document.querySelectorAll(".view-tab").forEach((button) => {
-  button.addEventListener("click", () => setView(button.dataset.view));
+  button.addEventListener("click", () => {
+    setView(button.dataset.view);
+    closeSidebarDrawer();
+  });
 });
+
+const sidebarEl = document.getElementById("sidebar");
+const sidebarToggleEl = document.getElementById("sidebar-toggle");
+const sidebarBackdropEl = document.getElementById("sidebar-backdrop");
+
+function openSidebarDrawer() {
+  sidebarEl?.classList.add("is-open");
+  sidebarBackdropEl?.classList.add("is-open");
+}
+
+function closeSidebarDrawer() {
+  sidebarEl?.classList.remove("is-open");
+  sidebarBackdropEl?.classList.remove("is-open");
+}
+
+if (sidebarToggleEl) {
+  sidebarToggleEl.addEventListener("click", () => {
+    if (sidebarEl?.classList.contains("is-open")) {
+      closeSidebarDrawer();
+    } else {
+      openSidebarDrawer();
+    }
+  });
+}
+
+if (sidebarBackdropEl) {
+  sidebarBackdropEl.addEventListener("click", closeSidebarDrawer);
+}
 
 productSelect.addEventListener("change", () => {
   humidityInput.value = "";
@@ -2807,19 +2839,65 @@ complaintFormEl.addEventListener("submit", async (event) => {
   }
 });
 
-deliveriesBodyEl.addEventListener("change", async (event) => {
+async function transitionDelivery(id, action, payload) {
+  const endpointMap = {
+    Confirmat: "confirm",
+    Livrat: "deliver",
+    Inchis: "close",
+    Anulat: "cancel",
+    Redeschis: "reopen"
+  };
+  const endpoint = endpointMap[action];
+  if (!endpoint) {
+    throw new Error(`Tranzitie necunoscuta: ${action}`);
+  }
+  const response = await fetch(`/api/deliveries/${id}/${endpoint}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || `Nu am putut aplica tranzitia ${action}.`);
+  }
+  return response.json();
+}
+
+deliveriesBodyEl.addEventListener("click", async (event) => {
   const target = event.target;
-  if (!target.matches(".delivery-status")) {
+  if (!target.matches(".delivery-action")) {
     return;
   }
+  const action = target.dataset.action;
+  const id = target.dataset.id;
 
   try {
-    const changeReason = requestChangeReason("Introdu mentiunea pentru modificarea livrarii:");
-    await updateDeliveryEntry(target.dataset.id, {
-      status: target.value,
-      changeReason,
-      changedBy: "dashboard"
-    });
+    const payload = {};
+    if (action === "Livrat") {
+      const grossRaw = window.prompt("Greutate bruto (kg):");
+      if (grossRaw === null) return;
+      const tareRaw = window.prompt("Greutate tara (kg):", "0");
+      if (tareRaw === null) return;
+      const gross = Number(grossRaw);
+      const tare = Number(tareRaw);
+      if (!Number.isFinite(gross) || gross <= 0) {
+        window.alert("Greutate bruto invalida.");
+        return;
+      }
+      if (!Number.isFinite(tare) || tare < 0) {
+        window.alert("Greutate tara invalida.");
+        return;
+      }
+      payload.grossWeight = gross;
+      payload.tareWeight = tare;
+    }
+    const needsReason = action === "Anulat" || action === "Redeschis" || action === "Inchis";
+    if (needsReason) {
+      payload.changeReason = requestChangeReason(`Motivul pentru ${action}:`);
+    } else {
+      payload.changeReason = `Tranzitie ${action}`;
+    }
+    await transitionDelivery(id, action, payload);
     await Promise.all([loadDeliveries(), loadReceipts(), loadAuditLogs(), loadDailyReport()]);
   } catch (error) {
     window.alert(error.message);
@@ -2834,12 +2912,53 @@ complaintsBodyEl.addEventListener("change", async (event) => {
   }
 
   try {
+    const newStatus = target.value;
     const changeReason = requestChangeReason("Introdu mentiunea pentru modificarea reclamatiei:");
-    await updateComplaintEntry(target.dataset.id, {
-      status: target.value,
+    const payload = {
+      status: newStatus,
       changeReason,
       changedBy: "dashboard"
-    });
+    };
+
+    if (newStatus === "Acceptata") {
+      const tip = window.prompt(
+        "Tip rezolutie: 'factura' (invoice adjustment), 'stoc' (stock correction), 'ambele' sau 'niciuna':",
+        "niciuna"
+      );
+      if (tip === null) return;
+      const resolution = String(tip).trim().toLowerCase();
+      if (resolution === "factura" || resolution === "ambele") {
+        const amtRaw = window.prompt("Suma ajustare factura (MDL, negativ pentru reducere):", "-100");
+        if (amtRaw === null) return;
+        const amt = Number(amtRaw);
+        if (!Number.isFinite(amt) || amt === 0) {
+          window.alert("Suma ajustare invalida.");
+          return;
+        }
+        const note = window.prompt("Nota ajustare factura:", "Ajustare din reclamatie") || "";
+        payload.invoiceAdjustment = { type: "adjust", amount: amt, note };
+      }
+      if (resolution === "stoc" || resolution === "ambele") {
+        const delRaw = window.prompt("ID livrare pentru corectie stoc:");
+        if (delRaw === null) return;
+        const deltaRaw = window.prompt("Delta cantitate (kg, negativ = scadere):", "-50");
+        if (deltaRaw === null) return;
+        const deliveryId = Number(delRaw);
+        const deltaQuantity = Number(deltaRaw);
+        if (!Number.isFinite(deliveryId) || deliveryId <= 0) {
+          window.alert("ID livrare invalid.");
+          return;
+        }
+        if (!Number.isFinite(deltaQuantity) || deltaQuantity === 0) {
+          window.alert("Delta cantitate invalida.");
+          return;
+        }
+        const note = window.prompt("Nota corectie stoc:", "Corectie din reclamatie") || "";
+        payload.stockCorrection = { deliveryId, deltaQuantity, note };
+      }
+    }
+
+    await updateComplaintEntry(target.dataset.id, payload);
     await Promise.all([loadComplaints(), loadDeliveries(), loadReceipts(), loadAuditLogs(), loadDailyReport()]);
   } catch (error) {
     window.alert(error.message);
@@ -2941,11 +3060,11 @@ document.querySelectorAll(".list-block").forEach((container) => {
     }
 
     try {
-      if (action === "edit") {
+      if (action === "edit" && entity !== "roles") {
         openEditor(entity, item);
       }
 
-      if (action === "toggle" && Object.prototype.hasOwnProperty.call(item, "active")) {
+      if (action === "toggle" && entity !== "roles" && Object.prototype.hasOwnProperty.call(item, "active")) {
         const changeReason = requestChangeReason("Introdu mentiunea pentru activare/dezactivare:");
         await updateConfigEntry(entity, id, {
           ...item,

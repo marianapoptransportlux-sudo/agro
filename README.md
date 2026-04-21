@@ -70,6 +70,48 @@ MVP pentru un soft agro cu:
   npm run backups:restore -- 2026-04-18T09-39-55-265Z
   ```
 
+## Utilizatori si roluri
+
+- Utilizatorii sunt persistati in `.runtime-data/config.json`.
+- Rolurile v1 sunt fixe si suportate oficial:
+  - `operator`
+  - `manager`
+  - `accountant`
+  - `admin`
+- La prima initializare se creeaza un singur cont bootstrap:
+  - username: `admin`
+  - parola initiala: `Agro2026!` sau valoarea din `DEFAULT_USER_PASSWORD`
+- Pentru administrare programatica exista endpoint-uri dedicate:
+  - `GET /api/users`
+  - `POST /api/users`
+  - `PATCH /api/users/:id`
+
+Exemplu creare utilizator:
+
+```json
+{
+  "name": "Operator Siloz 1",
+  "username": "operator.siloz1",
+  "roleCode": "operator",
+  "channel": "web",
+  "active": true,
+  "password": "ParolaTemporara123"
+}
+```
+
+Exemplu schimbare rol sau dezactivare:
+
+```json
+{
+  "name": "Operator Siloz 1",
+  "username": "operator.siloz1",
+  "roleCode": "manager",
+  "channel": "web+telegram",
+  "active": false,
+  "changeReason": "Promovare sau suspendare temporara"
+}
+```
+
 ## Flux Telegram
 
 1. Deschizi botul
@@ -85,7 +127,7 @@ MVP pentru un soft agro cu:
 
 ## Observatii
 
-- In modul local, datele sunt salvate in `data/receipts.json`.
+- In modul local, datele sunt salvate in `.runtime-data/config.json` si `.runtime-data/receipts.json`.
 - In modul Supabase, serverul foloseste cheia `SUPABASE_SERVICE_ROLE_KEY`, deci cheia ramane doar pe backend.
 - Endpoint-ul `GET /api/health` iti arata storage-ul activ.
 

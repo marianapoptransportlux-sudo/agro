@@ -20,6 +20,11 @@ const {
   updateSystemSettingsHandler
 } = require("./config-handlers");
 const {
+  createUserHandler,
+  listUsersHandler,
+  updateUserHandler
+} = require("./user-handlers");
+const {
   closeReceiptHandler,
   createReceiptHandler,
   healthHandler,
@@ -131,6 +136,11 @@ app.patch("/api/config/:entity/:id", requireRoles(["admin"]), async (req, res) =
 });
 
 app.patch("/api/system-settings", requireRoles(["admin"]), updateSystemSettingsHandler);
+app.get("/api/users", requireRoles(["admin"]), listUsersHandler);
+app.post("/api/users", requireRoles(["admin"]), createUserHandler);
+app.patch("/api/users/:id", requireRoles(["admin"]), async (req, res) => {
+  return updateUserHandler(req, res, req.params.id);
+});
 
 app.get(
   "/api/receipts",
@@ -286,7 +296,7 @@ app.get(
   getDailyReportHandler
 );
 
-app.get("/api/audit-logs", requireRoles(["manager", "admin", "control"]), listAuditLogsHandler);
+app.get("/api/audit-logs", requireRoles(["manager", "admin"]), listAuditLogsHandler);
 app.get("/api/security/lockouts", requireRoles(["admin"]), listLockoutsHandler);
 app.post("/api/security/lockouts/:username/unlock", requireRoles(["admin"]), async (req, res) => {
   return unlockUsernameHandler(req, res, req.params.username);

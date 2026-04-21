@@ -10,11 +10,13 @@ const modulePathsToReset = [
   "src/automation-state.js",
   "src/bot.js",
   "src/critical-alerts.js",
+  "src/permissions.js",
   "src/runtime-backup.js",
   "src/local-storage.js",
   "src/management-report.js",
   "src/storage.js",
-  "src/auth-handlers.js"
+  "src/auth-handlers.js",
+  "src/user-handlers.js"
 ];
 
 function clearModuleCache() {

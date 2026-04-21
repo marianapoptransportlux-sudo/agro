@@ -1,6 +1,12 @@
 const fs = require("fs");
 const path = require("path");
 const { createPasswordRecord } = require("./auth");
+const {
+  getRoleName,
+  getRolePermissions,
+  listSystemRoles,
+  normalizeRoleCode
+} = require("./permissions");
 const { backupRuntimeData } = require("./runtime-backup");
 const { writeJsonAtomic } = require("./atomic-write");
 
@@ -35,20 +41,9 @@ const defaultConfigState = {
     fiscalProfiles: 3,
     processingTypes: 3
   },
-  roles: [
-    { id: 1, name: "Operator receptie", code: "operator", permissions: "receptie, procesare" },
-    { id: 2, name: "Manager", code: "manager", permissions: "control, incasari primare" },
-    { id: 3, name: "Contabil", code: "accountant", permissions: "plati, incasari, documente" },
-    { id: 4, name: "Administrator sistem", code: "admin", permissions: "setup, utilizatori" },
-    { id: 5, name: "Control / conducere", code: "control", permissions: "rapoarte, audit" },
-    { id: 6, name: "Contabil sef", code: "accountant-sef", permissions: "reclamatii, ajustari stoc, ajustari factura, audit" }
-  ],
+  roles: listSystemRoles(),
   users: [
-    { id: 1, name: "Operator demo", username: "operator", roleCode: "operator", channel: "web", active: true },
-    { id: 2, name: "Manager demo", username: "manager", roleCode: "manager", channel: "web+telegram", active: true },
-    { id: 3, name: "Contabil demo", username: "contabil", roleCode: "accountant", channel: "web", active: true },
-    { id: 4, name: "Admin demo", username: "admin", roleCode: "admin", channel: "web", active: true },
-    { id: 5, name: "Control demo", username: "control", roleCode: "control", channel: "telegram", active: true }
+    { id: 1, name: "Administrator", username: "admin", roleCode: "admin", channel: "web", active: true }
   ],
   partners: [
     {
@@ -187,11 +182,14 @@ function buildUniqueUsername(users, preferredUsername, excludeId = null) {
 }
 
 function sanitizeUserForClient(user) {
+  const roleCode = normalizeRoleCode(user.roleCode);
   return {
     id: user.id,
     name: user.name,
     username: user.username,
-    roleCode: user.roleCode,
+    roleCode,
+    roleName: getRoleName(roleCode),
+    permissions: getRolePermissions(roleCode),
     channel: user.channel,
     active: user.active !== false,
     requirePasswordChange: user.requirePasswordChange === true,
@@ -200,39 +198,71 @@ function sanitizeUserForClient(user) {
   };
 }
 
+function normalizeReportAudience(value) {
+  return Array.from(
+    new Set(
+      String(value || "")
+        .split(",")
+        .map((item) => String(item || "").trim().toLowerCase())
+        .filter(Boolean)
+        .map((item) => (item === "control" ? "manager" : item))
+    )
+  ).join(",");
+}
+
+function ensureSystemRoles(roles = []) {
+  const currentByCode = new Map(roles.map((item) => [normalizeRoleCode(item.code), item]));
+  let changed = false;
+  const normalizedRoles = listSystemRoles().map((role) => {
+    const existing = currentByCode.get(role.code);
+    if (!existing) {
+      changed = true;
+      return role;
+    }
+
+    if (
+      String(existing.name || "") !== role.name ||
+      String(existing.permissions || "") !== role.permissions ||
+      existing.system !== true ||
+      normalizeRoleCode(existing.code) !== role.code
+    ) {
+      changed = true;
+    }
+
+    return {
+      ...role,
+      createdAt: existing.createdAt || undefined,
+      updatedAt: existing.updatedAt || undefined
+    };
+  });
+
+  return { roles: normalizedRoles, changed };
+}
+
 function ensureUserSecurityState(users = []) {
   let changed = false;
   const normalizedUsers = [];
-  const demoUsernamesByRole = {
-    operator: "operator",
-    manager: "manager",
-    accountant: "contabil",
-    admin: "admin",
-    control: "control"
-  };
 
   for (const user of users) {
     const nextUser = { ...user };
+    const normalizedRole = normalizeRoleCode(nextUser.roleCode);
 
-    const demoUsername = demoUsernamesByRole[nextUser.roleCode];
-    if (
-      demoUsername &&
-      String(nextUser.name || "").toLowerCase().endsWith("demo") &&
-      (!nextUser.username || nextUser.username === `${slugifyUsername(nextUser.name)}`
-        || nextUser.username === `${slugifyUsername(nextUser.name)}.2`)
-    ) {
-      nextUser.username = buildUniqueUsername(
-        [...users, ...normalizedUsers],
-        demoUsername,
-        nextUser.id
-      );
+    if (normalizedRole !== nextUser.roleCode) {
+      nextUser.roleCode = normalizedRole;
       changed = true;
-    } else if (!nextUser.username) {
+    }
+
+    if (!nextUser.username) {
       nextUser.username = buildUniqueUsername(
         [...users, ...normalizedUsers],
         nextUser.name || "utilizator",
         nextUser.id
       );
+      changed = true;
+    }
+
+    if (!nextUser.channel) {
+      nextUser.channel = "web";
       changed = true;
     }
 
@@ -260,6 +290,28 @@ function ensureUserSecurityState(users = []) {
   }
 
   return { users: normalizedUsers, changed };
+}
+
+function ensureBootstrapAdmin(users = []) {
+  if (users.some((item) => item.active !== false && normalizeRoleCode(item.roleCode) === "admin")) {
+    return { users, changed: false };
+  }
+
+  const nextUsers = [...users];
+  const passwordRecord = createPasswordRecord(defaultUserPassword);
+  nextUsers.push({
+    id: nextUsers.reduce((max, item) => Math.max(max, Number(item.id || 0)), 0) + 1,
+    name: "Administrator",
+    username: buildUniqueUsername(nextUsers, "admin"),
+    roleCode: "admin",
+    channel: "web",
+    active: true,
+    passwordSalt: passwordRecord.salt,
+    passwordHash: passwordRecord.hash,
+    createdAt: new Date().toISOString()
+  });
+
+  return { users: nextUsers, changed: true };
 }
 
 function ensureDir() {
@@ -322,7 +374,16 @@ function readConfigState() {
   }
 
   state.nextIds = { ...defaultConfigState.nextIds, ...(state.nextIds || {}) };
-  state.systemSettings = { ...defaultConfigState.systemSettings, ...(state.systemSettings || {}) };
+  state.systemSettings = {
+    ...defaultConfigState.systemSettings,
+    ...(state.systemSettings || {}),
+    reportAudience: normalizeReportAudience(
+      state.systemSettings?.reportAudience || defaultConfigState.systemSettings.reportAudience
+    )
+  };
+
+  const systemRolesState = ensureSystemRoles(state.roles);
+  state.roles = systemRolesState.roles;
 
   if (!state.roles.some((item) => item.code === "accountant-sef")) {
     const maxRoleId = state.roles.reduce((max, item) => Math.max(max, Number(item.id || 0)), 0);
@@ -340,11 +401,16 @@ function readConfigState() {
   }
 
   const userSecurityState = ensureUserSecurityState(state.users);
-  if (userSecurityState.changed) {
-    state.users = userSecurityState.users;
+  const bootstrapAdminState = ensureBootstrapAdmin(userSecurityState.users);
+  state.users = bootstrapAdminState.users;
+
+  if (systemRolesState.changed || userSecurityState.changed || bootstrapAdminState.changed) {
+    state.nextIds.roles = 4;
+    state.nextIds.users = Math.max(
+      Number(state.nextIds.users || 0),
+      state.users.reduce((max, item) => Math.max(max, Number(item.id || 0)), 0)
+    );
     writeJson(configFile, state);
-  } else {
-    state.users = userSecurityState.users;
   }
 
   return state;
@@ -831,8 +897,9 @@ function normalizeEntityPayload(entity, payload) {
     case "roles":
       return {
         name: requiredText(payload.name, "Numele rolului"),
-        code: requiredText(payload.code, "Codul rolului"),
-        permissions: String(payload.permissions || "").trim()
+        code: normalizeRoleCode(requiredText(payload.code, "Codul rolului")),
+        permissions: String(payload.permissions || "").trim(),
+        system: true
       };
     case "users":
       return {
@@ -840,8 +907,8 @@ function normalizeEntityPayload(entity, payload) {
         username: requiredText(
           payload.username || slugifyUsername(payload.name),
           "Utilizatorul"
-        ),
-        roleCode: requiredText(payload.roleCode, "Rolul utilizatorului"),
+        ).toLowerCase(),
+        roleCode: normalizeRoleCode(requiredText(payload.roleCode, "Rolul utilizatorului")),
         channel: requiredText(payload.channel || "web", "Canalul utilizatorului"),
         active: sanitizeBoolean(payload.active ?? true),
         password: String(payload.password || "").trim()
@@ -2127,6 +2194,9 @@ async function getDailyReport(dateValue = new Date().toISOString().slice(0, 10))
 
 async function createConfigEntry(entity, payload) {
   assertEntity(entity);
+  if (entity === "roles") {
+    throw new Error("Rolurile sistem sunt fixe in versiunea curenta.");
+  }
   const state = readConfigState();
   const normalized = normalizeEntityPayload(entity, payload);
   const reason = requiredChangeReason(payload.changeReason);
@@ -2202,6 +2272,9 @@ async function createConfigEntry(entity, payload) {
 
 async function updateConfigEntry(entity, id, payload) {
   assertEntity(entity);
+  if (entity === "roles") {
+    throw new Error("Rolurile sistem sunt fixe in versiunea curenta.");
+  }
   const state = readConfigState();
   const list = state[entity];
   const existing = list.find((item) => item.id === Number(id));
@@ -2241,6 +2314,17 @@ async function updateConfigEntry(entity, id, payload) {
     throw new Error("Exista deja un utilizator cu acest username.");
   }
 
+  if (
+    entity === "users" &&
+    normalizeRoleCode(existing.roleCode) === "admin" &&
+    (!normalized.active || normalizeRoleCode(normalized.roleCode) !== "admin") &&
+    state.users.filter(
+      (item) => item.id !== Number(id) && item.active !== false && normalizeRoleCode(item.roleCode) === "admin"
+    ).length === 0
+  ) {
+    throw new Error("Trebuie sa ramana cel putin un administrator activ.");
+  }
+
   const adminResetPassword = entity === "users" && normalized.password;
 
   Object.assign(existing, normalized, {
@@ -2273,6 +2357,21 @@ async function updateConfigEntry(entity, id, payload) {
   return entity === "users" ? sanitizeUserForClient(existing) : existing;
 }
 
+async function listUsers() {
+  const config = readConfigState();
+  return config.users
+    .map(sanitizeUserForClient)
+    .sort((left, right) => String(left.name || "").localeCompare(String(right.name || ""), "ro"));
+}
+
+async function createUser(payload) {
+  return createConfigEntry("users", payload);
+}
+
+async function updateUserById(id, payload) {
+  return updateConfigEntry("users", id, payload);
+}
+
 async function updateSystemSettings(payload) {
   const state = readConfigState();
   const reason = requiredChangeReason(payload.changeReason);
@@ -2282,7 +2381,7 @@ async function updateSystemSettings(payload) {
     ...state.systemSettings,
     closeOfDayHour: sanitizeNumber(payload.closeOfDayHour ?? state.systemSettings.closeOfDayHour),
     reportChannel: String(payload.reportChannel || state.systemSettings.reportChannel).trim(),
-    reportAudience: String(payload.reportAudience || state.systemSettings.reportAudience).trim(),
+    reportAudience: normalizeReportAudience(payload.reportAudience || state.systemSettings.reportAudience),
     defaultCurrency: String(payload.defaultCurrency || state.systemSettings.defaultCurrency).trim()
   };
   writeConfigState(state);
@@ -2531,6 +2630,7 @@ module.exports = {
   createProcessing,
   createReceipt,
   createTransaction,
+  createUser,
   exportResourceAsCsv,
   findUserByUsername,
   getConfig,
@@ -2549,6 +2649,7 @@ module.exports = {
   listProcessings,
   listReceipts,
   listTransactions,
+  listUsers,
   reopenReceipt,
   runMigrationIfNeeded,
   transitionDelivery,
@@ -2560,5 +2661,6 @@ module.exports = {
   updateReceiptStatusWithAudit,
   updateSystemSettings,
   updateTransaction,
+  updateUserById,
   updateUserPasswordById
 };

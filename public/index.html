@@ -40,19 +40,62 @@
     </section>
 
     <div class="page-shell" id="page-shell" hidden>
-      <header class="session-bar">
-        <div>
-          <p class="eyebrow">Sesiune activa</p>
-          <strong id="current-user-name">-</strong>
-          <span id="current-user-role">-</span>
-        </div>
-        <div class="session-actions">
-          <button class="ghost-button" id="change-password-button" type="button">
-            Schimba parola
-          </button>
-          <button class="ghost-button" id="logout-button" type="button">Iesire</button>
-        </div>
-      </header>
+      <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Meniu">☰</button>
+      <div class="sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
+      <div class="layout">
+        <aside class="sidebar" id="sidebar">
+          <div class="sidebar-brand">
+            <span class="sidebar-brand-title">SOFT ELEVATOR</span>
+            <span class="sidebar-brand-sub">Etapa 1</span>
+          </div>
+          <nav class="sidebar-nav">
+            <button class="view-tab sidebar-item is-active" data-view="acasa" type="button">
+              <span class="sidebar-icon">🏠</span><span>Acasă</span>
+            </button>
+            <button class="view-tab sidebar-item" data-view="receptii" data-access="receipts-read" type="button">
+              <span class="sidebar-icon">📥</span><span>Recepții</span>
+            </button>
+            <button class="view-tab sidebar-item" data-view="procesare" data-access="processings-read" type="button">
+              <span class="sidebar-icon">⚙️</span><span>Procesare</span>
+            </button>
+            <button class="view-tab sidebar-item" data-view="stoc" data-access="stocks-read" type="button">
+              <span class="sidebar-icon">📦</span><span>Stoc</span>
+            </button>
+            <button class="view-tab sidebar-item" data-view="livrari" data-access="deliveries-read" type="button">
+              <span class="sidebar-icon">📤</span><span>Livrări</span>
+            </button>
+            <button class="view-tab sidebar-item" data-view="reclamatii" data-access="complaints-read" type="button">
+              <span class="sidebar-icon">⚠️</span><span>Reclamații</span>
+            </button>
+            <button class="view-tab sidebar-item" data-view="financiar" data-access="finance" type="button">
+              <span class="sidebar-icon">💰</span><span>Financiar</span>
+            </button>
+            <button class="view-tab sidebar-item" data-view="deschidere" data-access="opening" type="button">
+              <span class="sidebar-icon">📋</span><span>Deschidere</span>
+            </button>
+            <button class="view-tab sidebar-item" data-view="rapoarte" data-access="reports" type="button">
+              <span class="sidebar-icon">📊</span><span>Rapoarte</span>
+            </button>
+            <button class="view-tab sidebar-item" data-view="audit" data-access="audit" type="button">
+              <span class="sidebar-icon">🔍</span><span>Audit</span>
+            </button>
+            <div class="sidebar-separator" aria-hidden="true"></div>
+            <button class="view-tab sidebar-item" data-view="configurare" data-access="setup" type="button">
+              <span class="sidebar-icon">🛠️</span><span>Configurare</span>
+            </button>
+          </nav>
+          <div class="sidebar-footer">
+            <div class="sidebar-user">
+              <p class="sidebar-user-name" id="current-user-name">-</p>
+              <p class="sidebar-user-role" id="current-user-role">-</p>
+            </div>
+            <div class="sidebar-user-actions">
+              <button class="sidebar-item-ghost" id="change-password-button" type="button">Schimbă parola</button>
+              <button class="sidebar-item-ghost sidebar-item-danger" id="logout-button" type="button">Ieșire</button>
+            </div>
+          </div>
+        </aside>
+        <main class="main-area">
 
       <section class="panel password-panel" id="password-panel" hidden>
         <div class="panel-head">
@@ -82,38 +125,15 @@
         </form>
       </section>
 
-      <section class="hero">
-        <div>
-          <p class="eyebrow">Soft elevator</p>
-          <h1>Fundatia Etapei 1: operare si configurare</h1>
-          <p class="hero-copy">
-            Dashboard-ul acopera receptia curenta si administreaza nomenclatoarele de baza:
-            parteneri, produse, locatii, roluri, utilizatori si tarife.
-          </p>
-        </div>
-        <div class="hero-card">
-          <p>Etapa activa</p>
-          <strong>Fundatie + configurare</strong>
-          <span>Pregateste fluxurile pentru receptie, stoc si procesare.</span>
-        </div>
-      </section>
+        <section class="stats" id="stats" data-view="acasa"></section>
 
-      <nav class="view-switch">
-        <button class="view-tab is-active" data-view="operations" type="button">Operare</button>
-        <button class="view-tab" data-view="setup" data-access="setup" type="button">Configurare etapa 1</button>
-      </nav>
-
-      <section class="view-section is-active" data-view-panel="operations">
-        <section class="stats" id="stats"></section>
-
-        <section class="panel filters-panel">
+        <section class="panel filters-panel" data-view="receptii">
           <div class="panel-head">
-            <h2>Filtre operare</h2>
-            <p>Filtrare rapida pentru receptii si procesari</p>
+            <h2>Filtre receptii</h2>
           </div>
           <div class="split">
             <label>
-              Filtru receptii dupa status
+              Filtru dupa status
               <select id="receipt-status-filter">
                 <option value="">Toate</option>
                 <option value="Draft">Draft</option>
@@ -128,21 +148,27 @@
               </select>
             </label>
             <label>
-              Filtru receptii dupa produs
+              Filtru dupa produs
               <select id="receipt-product-filter">
                 <option value="">Toate produsele</option>
               </select>
             </label>
           </div>
+        </section>
+
+        <section class="panel filters-panel" data-view="procesare">
+          <div class="panel-head">
+            <h2>Filtre procesari</h2>
+          </div>
           <div class="split">
             <label>
-              Filtru procesari dupa tip
+              Filtru dupa tip
               <select id="processing-type-filter">
                 <option value="">Toate procesarile</option>
               </select>
             </label>
             <label>
-              Filtru procesari dupa receptie
+              Filtru dupa receptie
               <select id="processing-receipt-filter">
                 <option value="">Toate receptiile</option>
               </select>
@@ -150,7 +176,7 @@
           </div>
         </section>
 
-        <section class="panel opening-panel" data-access="opening">
+        <section class="panel opening-panel" data-access="opening" data-view="deschidere">
           <div class="panel-head">
             <h2>Document sold initial</h2>
             <p>Introdu stocurile actuale si lista de datorii la pornirea sistemului</p>
@@ -252,7 +278,7 @@
           </form>
         </section>
 
-        <section class="grid">
+        <section class="grid" data-view="receptii">
           <form class="panel form-panel" id="receipt-form" data-access="receipt-write">
             <div class="panel-head">
               <h2>Receptie noua</h2>
@@ -381,7 +407,7 @@
           </section>
         </section>
 
-        <section class="grid processing-grid">
+        <section class="grid processing-grid" data-view="procesare">
           <form class="panel form-panel" id="processing-form" data-access="processing-write">
             <div class="panel-head">
               <h2>Procesare lot</h2>
@@ -479,7 +505,7 @@
           </section>
         </section>
 
-        <section class="panel stock-panel">
+        <section class="panel stock-panel" data-view="stoc">
           <div class="panel-head">
             <h2>Stoc pe locatii</h2>
             <p>Vedere curenta pe locatie si produs, pe baza netului disponibil</p>
@@ -500,7 +526,7 @@
           </div>
         </section>
 
-        <section class="grid finance-grid" data-access="finance">
+        <section class="grid finance-grid" data-access="finance" data-view="financiar">
           <form class="panel form-panel" id="transaction-form">
             <div class="panel-head">
               <h2>Plata / incasare</h2>
@@ -597,7 +623,7 @@
           </section>
         </section>
 
-        <section class="grid delivery-grid">
+        <section class="grid delivery-grid" data-view="livrari">
           <form class="panel form-panel" id="delivery-form" data-access="delivery-write">
               <div class="panel-head">
                 <h2>Livrare / iesire din stoc</h2>
@@ -706,7 +732,7 @@
           </section>
         </section>
 
-        <section class="grid complaint-grid">
+        <section class="grid complaint-grid" data-view="reclamatii">
           <form class="panel form-panel" id="complaint-form" data-access="complaint-write">
             <div class="panel-head">
               <h2>Reclamatie / neajuns</h2>
@@ -787,7 +813,7 @@
           </section>
         </section>
 
-        <section class="panel open-journal-panel">
+        <section class="panel open-journal-panel" data-view="audit">
           <div class="panel-head">
             <h2>Jurnal pozitii deschise</h2>
             <p>Control rapid pentru datorii la furnizori si incasari de la clienti</p>
@@ -858,7 +884,7 @@
           </div>
         </section>
 
-        <section class="panel audit-panel" data-access="audit">
+        <section class="panel audit-panel" data-access="audit" data-view="audit">
           <div class="panel-head">
             <h2>Raport control modificari</h2>
             <p>Istoric pentru modificari, redeschideri si schimbari de status</p>
@@ -881,7 +907,7 @@
           </div>
         </section>
 
-        <section class="panel reports-panel" data-access="reports">
+        <section class="panel reports-panel" data-access="reports" data-view="rapoarte">
           <div class="panel-head">
             <h2>Raport zilnic operational</h2>
             <p>Sumar rapid pentru receptii, procesare, finante si stoc</p>
@@ -993,12 +1019,10 @@
             </section>
           </div>
         </section>
-      </section>
 
-      <section class="view-section" data-view-panel="setup" data-access="setup">
-        <section class="stats config-stats" id="config-summary"></section>
+        <section class="stats config-stats" id="config-summary" data-view="configurare"></section>
 
-        <section class="setup-grid">
+        <section class="setup-grid" data-view="configurare" data-access="setup">
           <article class="panel">
             <div class="panel-head">
               <h2>Parteneri</h2>
@@ -1112,16 +1136,8 @@
           <article class="panel">
             <div class="panel-head">
               <h2>Roluri si utilizatori</h2>
-              <p>Rolurile MVP si utilizatorii operationali</p>
+              <p>Rolurile v1 sunt fixe; administrezi utilizatorii si rolul lor.</p>
             </div>
-            <form class="mini-form" data-entity-form="roles">
-              <div class="split">
-                <input name="name" placeholder="Nume rol" required />
-                <input name="code" placeholder="Cod rol" required />
-              </div>
-              <input name="permissions" placeholder="Permisiuni principale" />
-              <button type="submit">Adauga rol</button>
-            </form>
             <div class="list-block compact-list" id="roles-list"></div>
 
             <form class="mini-form user-form" data-entity-form="users">
@@ -1304,7 +1320,7 @@
           </article>
         </section>
 
-        <section class="panel editor-panel" id="editor-panel">
+        <section class="panel editor-panel" id="editor-panel" data-view="configurare">
           <div class="panel-head">
             <h2 id="editor-title">Editor configurare</h2>
             <p id="editor-copy">
@@ -1326,7 +1342,8 @@
             <p class="form-message" id="editor-message"></p>
           </form>
         </section>
-      </section>
+        </main>
+      </div>
     </div>
 
     <script src="/app.js"></script>
