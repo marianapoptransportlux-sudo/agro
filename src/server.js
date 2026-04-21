@@ -70,11 +70,20 @@ const {
   getReceiptDefaultsHandler
 } = require("./report-extensions-handlers");
 const storage = require("./storage");
+const {
+  authLimiter,
+  csrfOriginGuardMiddleware,
+  httpsRedirectAndHstsMiddleware,
+  mutationLimiter
+} = require("./security-middleware");
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
 
 app.disable("x-powered-by");
+app.set("trust proxy", 1);
+
+app.use(httpsRedirectAndHstsMiddleware);
 
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
@@ -102,16 +111,18 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: "1mb" }));
+app.use("/api", csrfOriginGuardMiddleware);
 app.use("/api", attachCurrentUser);
 app.use(express.static(path.join(process.cwd(), "public")));
 
 app.get("/api/health", healthHandler);
-app.post("/api/auth/login", loginHandler);
+app.post("/api/auth/login", authLimiter, loginHandler);
 app.post("/api/auth/logout", logoutHandler);
 app.get("/api/auth/me", meHandler);
-app.post("/api/auth/change-password", requireAuth, changePasswordHandler);
+app.post("/api/auth/change-password", authLimiter, requireAuth, changePasswordHandler);
 
 app.use("/api", requireAuth);
+app.use("/api", mutationLimiter);
 
 app.get(
   "/api/opening-documents",

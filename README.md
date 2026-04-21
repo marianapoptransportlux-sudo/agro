@@ -80,7 +80,8 @@ MVP pentru un soft agro cu:
   - `admin`
 - La prima initializare se creeaza un singur cont bootstrap:
   - username: `admin`
-  - parola initiala: `Agro2026!` sau valoarea din `DEFAULT_USER_PASSWORD`
+  - parola initiala: valoarea din `DEFAULT_USER_PASSWORD` (obligatoriu in productie). In dezvoltare se foloseste `Agro2026!` cu warning la consola.
+  - la primul login flag-ul `requirePasswordChange` forteaza schimbarea parolei.
 - Pentru administrare programatica exista endpoint-uri dedicate:
   - `GET /api/users`
   - `POST /api/users`
@@ -144,3 +145,46 @@ Limitare actuala:
 
 - Botul Telegram ruleaza in polling si foloseste sesiuni in memorie (`Map`), deci nu este potrivit pentru Vercel in forma actuala.
 - Pentru a muta botul pe Vercel, trebuie trecut pe webhook si stocare persistenta a sesiunii in Supabase.
+
+## Securitate (deployment public)
+
+Inainte de a expune aplicatia in internet parcurge checklist-ul:
+
+### Obligatoriu
+
+- [ ] **`NODE_ENV=production`** — activeaza HTTPS redirect + HSTS + refuzul pornirii fara `DEFAULT_USER_PASSWORD`.
+- [ ] **`DEFAULT_USER_PASSWORD`** — parola puternica pentru contul bootstrap `admin` (min. 12 caractere, litere+cifre+simbol, NU `Agro2026!`). La primul login, parola trebuie schimbata (flag `requirePasswordChange`).
+- [ ] **HTTPS** — Vercel ofera automat. Pe VPS propriu foloseste Caddy sau nginx cu Let's Encrypt.
+- [ ] **`ALLOWED_ORIGINS`** (optional) — lista de origini externe acceptate, separate prin virgula. Implicit se accepta doar same-origin. Seteaza aici domeniile publice (ex: `https://agro.exemplu.md`).
+- [ ] **`SUPABASE_SERVICE_ROLE_KEY`** — tine-o doar in env vars secrete (Vercel Project Settings sau `.env` cu `.gitignore`). Nu include in frontend. Roteaza periodic.
+- [ ] **`TELEGRAM_BOT_TOKEN`** — idem, doar in env vars secrete.
+- [ ] **Administrare Telegram** — inainte de a publica botul, seteaza `telegramUserId` (numeric, imutabil) pe fiecare utilizator intern cu canal Telegram activ. Prima legare prin `/start` foloseste id-ul numeric din `ctx.from.id`; schimbarile ulterioare de Telegram username nu mai pot deturna contul.
+
+### Protectii incluse in cod
+
+- Rate limit pe `/api/auth/login` si `/api/auth/change-password` (max 20 incercari / 15 min / IP).
+- Rate limit pe mutatii (`POST`/`PATCH`/`DELETE`) — max 120 cereri / min / user+IP.
+- Login lockout per IP si per username (5 esuari / 15 min / bloc 15 min).
+- CSRF-guard pe mutatii: accepta doar cereri cu `Origin`/`Referer` same-origin sau in `ALLOWED_ORIGINS`.
+- HSTS + redirect HTTP -> HTTPS cand `NODE_ENV=production` (sau `FORCE_HTTPS=true`).
+- CSP stricta (doar `self` pentru script-uri; fara inline), `X-Frame-Options: DENY`, `frame-ancestors 'none'`.
+- Cookie de sesiune `HttpOnly`, `SameSite=Strict`, `Secure` in productie.
+- Mascare automata a campurilor sensibile (`password*`, `token`, `apiKey`, `secret`) in audit log.
+- Politica parolei: min 10 caractere strict + blacklist; min 6 in mod `lenient` doar pentru seed.
+- Inactivity timeout 30 min pe sesiune; TTL absolut 12h.
+- Permisiuni centralizate in `src/permissions.js` (capabilities per rol).
+
+### Recomandari suplimentare
+
+- Backup automat `.runtime-data/` (script existent `scripts/runtime-backup-cli.js`). Pentru Supabase foloseste point-in-time recovery.
+- Monitorizeaza `GET /api/audit-logs` regulat pentru tranzactii neobisnuite.
+- Deploy printr-un CI care ruleaza `npm test` inainte de publicare.
+- Pentru acces extern, plaseaza aplicatia in spatele unui WAF (Cloudflare gratis, Vercel default) pentru filtrare de boti si DDoS.
+- Limiteaza lista de IP-uri admin folosind reguli de firewall la nivel de infrastructura daca accesul admin e doar din birou.
+
+### Ce nu e inclus (deferred)
+
+- 2FA (TOTP) pentru admin — planificat.
+- Rotatie automata a token-urilor / API key-urilor.
+- Integrare cu un IdP extern (Google/Microsoft/SAML).
+- Semnare criptografica a payload-urilor critice (recipe/livrare).

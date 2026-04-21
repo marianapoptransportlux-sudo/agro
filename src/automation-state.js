@@ -74,16 +74,44 @@ function linkTelegramUser(username, chatInfo = {}) {
   }
 
   const state = readAutomationState();
+  const existing = state.telegramLinks[normalizedUsername] || {};
+  const newTelegramUserId = chatInfo.telegramUserId ? String(chatInfo.telegramUserId).trim() : "";
+  const existingTelegramUserId = existing.telegramUserId || "";
+
+  // Anti-impersonation: once a link is bound to a Telegram user id,
+  // reject attempts from a different id. Admin must re-link explicitly.
+  if (existingTelegramUserId && newTelegramUserId && existingTelegramUserId !== newTelegramUserId) {
+    const err = new Error(
+      "Contul intern este deja legat de alt cont Telegram. Administratorul trebuie sa reseteze legatura."
+    );
+    err.code = "TELEGRAM_LINK_MISMATCH";
+    throw err;
+  }
+
   state.telegramLinks[normalizedUsername] = {
     username: normalizedUsername,
+    telegramUserId: newTelegramUserId || existingTelegramUserId,
     chatId: String(chatInfo.chatId || "").trim(),
     telegramUsername: String(chatInfo.telegramUsername || "").trim(),
     firstName: String(chatInfo.firstName || "").trim(),
-    linkedAt: state.telegramLinks[normalizedUsername]?.linkedAt || new Date().toISOString(),
+    linkedAt: existing.linkedAt || new Date().toISOString(),
     lastSeenAt: new Date().toISOString()
   };
   writeAutomationState(state);
   return state.telegramLinks[normalizedUsername];
+}
+
+function getTelegramLinkByUserId(telegramUserId) {
+  const normalized = String(telegramUserId || "").trim();
+  if (!normalized) {
+    return null;
+  }
+  const state = readAutomationState();
+  return (
+    Object.values(state.telegramLinks).find(
+      (item) => String(item?.telegramUserId || "") === normalized
+    ) || null
+  );
 }
 
 function getTelegramLink(username) {
@@ -403,6 +431,7 @@ module.exports = {
   getCriticalAlertState,
   getLastCloseOfDaySentDate,
   getTelegramLinkByChatId,
+  getTelegramLinkByUserId,
   getTelegramLink,
   getTelegramLinksForUsernames,
   linkTelegramUser,

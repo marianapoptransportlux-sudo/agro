@@ -396,27 +396,41 @@ function createHelpMessage() {
 }
 
 async function tryLinkTelegramAccount(ctx) {
+  const telegramUserId = ctx.from?.id ? String(ctx.from.id) : "";
   const telegramUsername = String(ctx.from?.username || "").trim().toLowerCase();
+
+  if (!telegramUserId) {
+    return "Nu am putut identifica contul tau Telegram. Reincearca din clientul Telegram oficial.";
+  }
+
   if (!telegramUsername) {
     return "Seteaza un username Telegram pentru a lega contul intern si a primi rapoarte automate.";
   }
 
   const user = await findUserByUsername(telegramUsername);
   if (!user) {
-    return `Nu exista utilizator intern cu username-ul ${telegramUsername}.`;
+    return `Nu exista utilizator intern cu username-ul ${telegramUsername}. Contacteaza administratorul.`;
   }
 
   if (!String(user.channel || "").includes("telegram")) {
     return `Utilizatorul ${telegramUsername} nu are activ canalul Telegram in sistem.`;
   }
 
-  linkTelegramUser(user.username, {
-    chatId: ctx.chat?.id,
-    telegramUsername,
-    firstName: ctx.from?.first_name || ""
-  });
+  try {
+    linkTelegramUser(user.username, {
+      telegramUserId,
+      chatId: ctx.chat?.id,
+      telegramUsername,
+      firstName: ctx.from?.first_name || ""
+    });
+  } catch (error) {
+    if (error.code === "TELEGRAM_LINK_MISMATCH") {
+      return "Contul tau Telegram difera de cel legat initial. Pentru securitate, contacteaza administratorul pentru relegare.";
+    }
+    throw error;
+  }
 
-  return `Canal Telegram activat pentru ${user.username}. Vei primi rapoarte automate daca esti inclus in audienta.`;
+  return `Canal Telegram activat pentru ${user.username} (id ${telegramUserId}). Vei primi rapoarte automate daca esti inclus in audienta.`;
 }
 
 function isBotReady() {

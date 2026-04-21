@@ -136,7 +136,29 @@ const configEntities = [
   "processingTypes"
 ];
 
-const defaultUserPassword = process.env.DEFAULT_USER_PASSWORD || "Agro2026!";
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+const envDefaultPassword = String(process.env.DEFAULT_USER_PASSWORD || "").trim();
+
+function resolveDefaultUserPassword() {
+  if (envDefaultPassword) {
+    return envDefaultPassword;
+  }
+  if (IS_PRODUCTION) {
+    throw new Error(
+      "DEFAULT_USER_PASSWORD env var este obligatoriu in productie. Seteaza o parola puternica pentru contul bootstrap admin."
+    );
+  }
+  if (!resolveDefaultUserPassword._warned) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[SECURITY] DEFAULT_USER_PASSWORD nu e setat. Folosesc valoarea de dezvoltare 'Agro2026!'. NU utiliza in productie."
+    );
+    resolveDefaultUserPassword._warned = true;
+  }
+  return "Agro2026!";
+}
+
+const defaultUserPassword = resolveDefaultUserPassword.bind(null);
 
 const DELIVERY_STATUSES = ["Proiect", "Confirmat", "Livrat", "Inchis", "Anulat", "Redeschis"];
 const RECEIPT_STATUSES = ["Proiect", "Draft", "Procesata", "Confirmat", "Inchis", "Anulat", "Redeschis"];
@@ -272,7 +294,7 @@ function ensureUserSecurityState(users = []) {
     }
 
     if (!nextUser.passwordSalt || !nextUser.passwordHash) {
-      const passwordRecord = createPasswordRecord(defaultUserPassword, { mode: "lenient" });
+      const passwordRecord = createPasswordRecord(defaultUserPassword(), { mode: "lenient" });
       nextUser.passwordSalt = passwordRecord.salt;
       nextUser.passwordHash = passwordRecord.hash;
       if (nextUser.requirePasswordChange === undefined) {
@@ -298,7 +320,7 @@ function ensureBootstrapAdmin(users = []) {
   }
 
   const nextUsers = [...users];
-  const passwordRecord = createPasswordRecord(defaultUserPassword);
+  const passwordRecord = createPasswordRecord(defaultUserPassword(), { mode: "lenient" });
   nextUsers.push({
     id: nextUsers.reduce((max, item) => Math.max(max, Number(item.id || 0)), 0) + 1,
     name: "Administrator",
@@ -2230,7 +2252,7 @@ async function createConfigEntry(entity, payload) {
   const passwordRecord =
     entity === "users"
       ? createPasswordRecord(
-          normalized.password || defaultUserPassword,
+          normalized.password || defaultUserPassword(),
           { mode: passwordExplicit ? "strict" : "lenient" }
         )
       : null;
