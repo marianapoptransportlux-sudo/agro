@@ -3,3 +3,6 @@ node_modules/
 data/
 .runtime-data/
 .runtime-data-backups/
+
+# Claude Code: doar setarile personale raman private; agentii + hook-ul se impart prin repo
+.claude/settings.local.json
