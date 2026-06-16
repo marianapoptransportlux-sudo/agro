@@ -860,6 +860,10 @@ function createDailyReport(dateValue, receipts, processings, transactions, stock
   };
 }
 
+function normalizeIdno(value) {
+  return String(value || "").replace(/\s+/g, "").toLowerCase();
+}
+
 function normalizeEntityPayload(entity, payload) {
   switch (entity) {
     case "partners":
@@ -2206,6 +2210,14 @@ async function createConfigEntry(entity, payload) {
     throw new Error("Exista deja un produs cu acest cod.");
   }
 
+  if (
+    entity === "partners" &&
+    normalized.idno &&
+    state.partners.some((item) => normalizeIdno(item.idno) === normalizeIdno(normalized.idno))
+  ) {
+    throw new Error("Exista deja un partener cu acest cod fiscal (IDNO).");
+  }
+
   if (entity === "roles" && state.roles.some((item) => item.code === normalized.code)) {
     throw new Error("Exista deja un rol cu acest cod.");
   }
@@ -2294,6 +2306,16 @@ async function updateConfigEntry(entity, id, payload) {
     state.products.some((item) => item.id !== Number(id) && item.code === normalized.code)
   ) {
     throw new Error("Exista deja un produs cu acest cod.");
+  }
+
+  if (
+    entity === "partners" &&
+    normalized.idno &&
+    state.partners.some(
+      (item) => item.id !== Number(id) && normalizeIdno(item.idno) === normalizeIdno(normalized.idno)
+    )
+  ) {
+    throw new Error("Exista deja un partener cu acest cod fiscal (IDNO).");
   }
 
   if (

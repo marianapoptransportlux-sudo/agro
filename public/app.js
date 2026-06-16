@@ -32,7 +32,9 @@ const processingFormEl = document.getElementById("processing-form");
 const messageEl = document.getElementById("form-message");
 const processingMessageEl = document.getElementById("processing-message");
 const configSummaryEl = document.getElementById("config-summary");
-const supplierSelect = document.getElementById("supplier-select");
+const supplierSearchEl = document.getElementById("supplier-search");
+const supplierIdEl = document.getElementById("supplier-id");
+const supplierSuggestionsEl = document.getElementById("supplier-suggestions");
 const productSelect = document.getElementById("product-select");
 const locationSelect = document.getElementById("location-select");
 const userSelect = document.getElementById("user-select");
@@ -695,7 +697,7 @@ function renderReceipts(receipts) {
         <tr>
           <td>#${item.id}</td>
           <td>${item.product}</td>
-          <td>${item.supplier}</td>
+          <td>${item.supplier || "-"}</td>
           <td>${formatNumber(item.grossQuantity || item.quantity)} / ${formatNumber(item.provisionalNetQuantity || item.quantity)} ${item.unit}</td>
           <td>${item.location || "-"}</td>
           <td>${currency.format(Number(item.preliminaryPayableAmount || 0))}</td>
@@ -893,7 +895,7 @@ function renderOpenJournal() {
       (item) => `
         <tr>
           <td>${item.id ? `#${item.id}` : "Sold initial"}</td>
-          <td>${item.supplier || item.partner}</td>
+          <td>${item.supplier || item.partner || "-"}</td>
           <td>${currency.format(Number(item.preliminaryPayableAmount || item.amount || 0))}</td>
           <td>${currency.format(Number(item.paidAmount || item.settledAmount || 0))}</td>
           <td>${item.paymentStatus || item.status || "Neachitat"}</td>
@@ -997,7 +999,7 @@ function renderDailyReport(report) {
       (item) => `
         <tr>
           <td>#${item.id}</td>
-          <td>${item.supplier}</td>
+          <td>${item.supplier || "-"}</td>
           <td>${item.product}</td>
           <td>${formatNumber(item.grossQuantity || item.quantity)}</td>
           <td>${formatNumber(item.provisionalNetQuantity || item.quantity)}</td>
@@ -1087,9 +1089,109 @@ function setSelectValue(select, preferredValues = []) {
   return select.value;
 }
 
+// --- Combobox furnizor: autocomplete "contains" (insensibil la diacritice) + dedup dupa cod fiscal (idno) ---
+let supplierMatches = [];
+let supplierActiveIndex = -1;
+
+function normalizeText(value) {
+  return String(value || "")
+    .toLocaleLowerCase("ro")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+}
+
+function getSupplierOptions() {
+  if (!currentConfig) {
+    return [];
+  }
+  const suppliers = currentConfig.partners.filter(
+    (item) => item.role === "furnizor" || item.role === "ambele"
+  );
+  const seen = new Set();
+  const unique = [];
+  for (const partner of suppliers) {
+    const key = normalizeText(partner.idno) || `name:${normalizeText(partner.name)}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    unique.push(partner);
+  }
+  return unique;
+}
+
+function closeSupplierSuggestions() {
+  supplierSuggestionsEl.hidden = true;
+  supplierSuggestionsEl.innerHTML = "";
+  supplierMatches = [];
+  supplierActiveIndex = -1;
+  supplierSearchEl.setAttribute("aria-expanded", "false");
+}
+
+function highlightSupplierOption() {
+  Array.from(supplierSuggestionsEl.children).forEach((li, index) => {
+    const active = index === supplierActiveIndex;
+    li.setAttribute("aria-selected", active ? "true" : "false");
+    if (active) {
+      li.scrollIntoView({ block: "nearest" });
+    }
+  });
+}
+
+function renderSupplierSuggestions(query) {
+  const normalizedQuery = normalizeText(query);
+  supplierActiveIndex = -1;
+  supplierMatches = normalizedQuery
+    ? getSupplierOptions().filter((partner) => normalizeText(partner.name).includes(normalizedQuery))
+    : [];
+
+  if (!supplierMatches.length) {
+    closeSupplierSuggestions();
+    return;
+  }
+
+  supplierSuggestionsEl.innerHTML = supplierMatches
+    .map(
+      (partner, index) => `
+        <li class="suggestion-item" role="option" id="supplier-option-${index}" data-index="${index}" aria-selected="false">
+          <span class="suggestion-name">${partner.name}</span>
+          <span class="suggestion-meta">${[partner.idno, partner.fiscalProfile].filter(Boolean).join(" · ") || "-"}</span>
+        </li>`
+    )
+    .join("");
+  supplierSuggestionsEl.hidden = false;
+  supplierSearchEl.setAttribute("aria-expanded", "true");
+}
+
+function selectSupplier(partner) {
+  if (!partner) {
+    return;
+  }
+  supplierIdEl.value = partner.id;
+  supplierSearchEl.value = partner.name;
+  closeSupplierSuggestions();
+  renderReceiptEstimate();
+}
+
+function clearSupplierSelection() {
+  supplierIdEl.value = "";
+  renderReceiptEstimate();
+}
+
+function restoreSupplierSelection() {
+  const partners = currentConfig ? currentConfig.partners : [];
+  const partner = partners.find((item) => String(item.id) === String(supplierIdEl.value));
+  if (partner) {
+    supplierSearchEl.value = partner.name;
+  } else {
+    supplierIdEl.value = "";
+    supplierSearchEl.value = "";
+  }
+}
+
 function renderReceiptSelectors(config) {
   const currentSelections = {
-    supplierId: supplierSelect.value,
+    supplierId: supplierIdEl.value,
     productId: productSelect.value,
     locationId: locationSelect.value,
     receivedBy: userSelect.value,
@@ -1101,13 +1203,11 @@ function renderReceiptSelectors(config) {
     deliveryCustomerId: deliveryCustomerSelect.value,
     complaintDeliveryId: complaintDeliverySelect.value
   };
-  const suppliers = config.partners.filter((item) => item.role === "furnizor" || item.role === "ambele");
   const customers = config.partners.filter((item) => item.role === "cumparator" || item.role === "ambele");
   const operators = config.users.filter((item) =>
     ["operator", "manager", "admin"].includes(item.roleCode)
   );
 
-  renderSelectOptions(supplierSelect, suppliers, (item) => item.name, "Selecteaza furnizor");
   renderSelectOptions(productSelect, config.products, (item) => `${item.name} (${item.code})`, "Selecteaza produs");
   renderSelectOptions(locationSelect, config.storageLocations, (item) => item.name, "Selecteaza locatie");
   renderSelectOptions(userSelect, operators, (item) => item.name, "Selecteaza utilizator");
@@ -1130,7 +1230,7 @@ function renderReceiptSelectors(config) {
     "Selecteaza partener"
   );
 
-  setSelectValue(supplierSelect, [currentSelections.supplierId, suppliers[0]?.id]);
+  restoreSupplierSelection();
   setSelectValue(productSelect, [currentSelections.productId, config.products[0]?.id]);
   setSelectValue(locationSelect, [currentSelections.locationId, config.storageLocations[0]?.id]);
   setSelectValue(userSelect, [currentSessionUser?.id, currentSelections.receivedBy, operators[0]?.id]);
@@ -1630,7 +1730,7 @@ function getReceiptEstimate() {
     (item) => String(item.id) === String(productSelect.value)
   );
   const selectedPartner = currentConfig.partners.find(
-    (item) => String(item.id) === String(supplierSelect.value)
+    (item) => String(item.id) === String(supplierIdEl.value)
   );
   const fiscalProfile = currentConfig.fiscalProfiles.find(
     (item) => item.name === selectedPartner?.fiscalProfile
@@ -1957,10 +2057,6 @@ async function createReceipt(formData) {
 }
 
 function validateReceiptForm(formData) {
-  if (!formData.get("supplierId")) {
-    return "Selecteaza furnizorul.";
-  }
-
   if (!formData.get("productId")) {
     return "Selecteaza produsul.";
   }
@@ -2017,7 +2113,7 @@ function getFormSubmitMode(form) {
 function resetReceiptForm(mode = "save") {
   const preserveContext = mode !== "save-new";
   const preservedValues = {
-    supplierId: preserveContext ? supplierSelect.value : "",
+    supplierId: preserveContext ? supplierIdEl.value : "",
     productId: preserveContext ? productSelect.value : "",
     locationId: preserveContext ? locationSelect.value : "",
     receivedBy: preserveContext ? userSelect.value : "",
@@ -2032,7 +2128,8 @@ function resetReceiptForm(mode = "save") {
   }
 
   if (preserveContext) {
-    setSelectValue(supplierSelect, [preservedValues.supplierId]);
+    supplierIdEl.value = preservedValues.supplierId;
+    restoreSupplierSelection();
     setSelectValue(productSelect, [preservedValues.productId]);
     setSelectValue(locationSelect, [preservedValues.locationId]);
     setSelectValue(userSelect, [preservedValues.receivedBy, currentSessionUser?.id]);
@@ -2598,7 +2695,42 @@ productSelect.addEventListener("change", () => {
   impurityInput.value = "";
   syncUnitByProduct();
 });
-supplierSelect.addEventListener("change", renderReceiptEstimate);
+supplierSearchEl.addEventListener("input", () => {
+  clearSupplierSelection();
+  renderSupplierSuggestions(supplierSearchEl.value);
+});
+supplierSearchEl.addEventListener("keydown", (event) => {
+  if (supplierSuggestionsEl.hidden) {
+    return;
+  }
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    supplierActiveIndex = Math.min(supplierActiveIndex + 1, supplierMatches.length - 1);
+    highlightSupplierOption();
+  } else if (event.key === "ArrowUp") {
+    event.preventDefault();
+    supplierActiveIndex = Math.max(supplierActiveIndex - 1, 0);
+    highlightSupplierOption();
+  } else if (event.key === "Enter") {
+    if (supplierActiveIndex >= 0) {
+      event.preventDefault();
+      selectSupplier(supplierMatches[supplierActiveIndex]);
+    }
+  } else if (event.key === "Escape") {
+    closeSupplierSuggestions();
+  }
+});
+supplierSuggestionsEl.addEventListener("mousedown", (event) => {
+  const li = event.target.closest(".suggestion-item");
+  if (!li) {
+    return;
+  }
+  event.preventDefault();
+  selectSupplier(supplierMatches[Number(li.dataset.index)]);
+});
+supplierSearchEl.addEventListener("blur", () => {
+  closeSupplierSuggestions();
+});
 humidityInput.addEventListener("input", renderReceiptEstimate);
 impurityInput.addEventListener("input", renderReceiptEstimate);
 formEl.elements.quantity.addEventListener("input", renderReceiptEstimate);

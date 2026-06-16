@@ -105,15 +105,18 @@ async function createReceiptHandler(req, res) {
   const actor = getActorLabel(req);
   const { quantity, price, humidity, impurity } = body;
 
-  if (!body.supplierId || !body.productId || quantity === undefined || quantity === "") {
+  if (!body.productId || quantity === undefined || quantity === "") {
     return sendJson(res, 400, {
-      error: "Campurile supplierId, productId si quantity sunt obligatorii."
+      error: "Campurile productId si quantity sunt obligatorii."
     });
   }
 
   try {
     const config = await getConfig();
-    const partner = config.partners.find((item) => item.id === Number(body.supplierId));
+    const hasSupplier = Boolean(body.supplierId);
+    const partner = hasSupplier
+      ? config.partners.find((item) => item.id === Number(body.supplierId))
+      : null;
     const product = config.products.find((item) => item.id === Number(body.productId));
     const location = body.locationId
       ? config.storageLocations.find((item) => item.id === Number(body.locationId))
@@ -122,7 +125,7 @@ async function createReceiptHandler(req, res) {
       (item) => item.name === partner?.fiscalProfile
     );
 
-    if (!partner) {
+    if (hasSupplier && !partner) {
       return sendJson(res, 400, { error: "Furnizorul selectat nu exista." });
     }
 
@@ -176,7 +179,7 @@ async function createReceiptHandler(req, res) {
       ...body,
       quantity: normalizedQuantity,
       price: normalizedPrice,
-      supplier: partner.name,
+      supplier: partner?.name || "",
       product: product.name,
       unit: product.unit,
       location: location?.name || "",

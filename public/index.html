@@ -285,9 +285,21 @@
               <p>Operatorul introduce rapid doar datele primare, restul ramane optional.</p>
             </div>
 
-            <label>
-              Furnizor
-              <select name="supplierId" id="supplier-select" required></select>
+            <label class="supplier-combobox" id="supplier-combobox">
+              Furnizor (optional)
+              <input
+                type="text"
+                id="supplier-search"
+                autocomplete="off"
+                role="combobox"
+                aria-expanded="false"
+                aria-controls="supplier-suggestions"
+                aria-autocomplete="list"
+                placeholder="Tasteaza pentru a cauta furnizorul (optional)"
+              />
+              <input type="hidden" name="supplierId" id="supplier-id" />
+              <ul id="supplier-suggestions" class="suggestions" role="listbox" hidden></ul>
+              <span class="field-hint">Optional. Lasa gol daca furnizorul se completeaza ulterior la facturare.</span>
             </label>
 
             <label>
